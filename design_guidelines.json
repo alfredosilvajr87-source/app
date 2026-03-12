@@ -1,0 +1,155 @@
+{
+  "identity": {
+    "name": "Lacucina",
+    "archetype": "Swiss Performance",
+    "vibe": "Mise en place - Organized, Sharp, Efficient",
+    "target_audience": "Professional Chefs, Kitchen Managers",
+    "emotional_tone": "Reliable, Fast, Precision-focused"
+  },
+  "typography": {
+    "headings": {
+      "family": "Chivo, sans-serif",
+      "weights": ["700", "900"],
+      "usage": "Page titles, Section headers, KPI values"
+    },
+    "body": {
+      "family": "Inter, sans-serif",
+      "weights": ["400", "500", "600"],
+      "usage": "General text, Table data, Form labels"
+    },
+    "mono": {
+      "family": "JetBrains Mono, monospace",
+      "usage": "SKUs, Order IDs, Numerical data in tables"
+    },
+    "scale": {
+      "h1": "text-4xl font-black tracking-tight",
+      "h2": "text-3xl font-bold tracking-tight",
+      "h3": "text-2xl font-bold tracking-tight",
+      "h4": "text-xl font-semibold tracking-tight",
+      "body_lg": "text-lg leading-relaxed",
+      "body_base": "text-base leading-relaxed",
+      "body_sm": "text-sm leading-normal",
+      "caption": "text-xs font-medium uppercase tracking-wider text-muted-foreground"
+    }
+  },
+  "colors": {
+    "theme": "light",
+    "palette": {
+      "primary": {
+        "DEFAULT": "#0f172a",
+        "foreground": "#f8fafc",
+        "description": "Slate 900 - Deep Charcoal for primary actions and headers"
+      },
+      "secondary": {
+        "DEFAULT": "#2563eb",
+        "foreground": "#ffffff",
+        "description": "Blue 600 - For primary buttons and active states"
+      },
+      "background": {
+        "DEFAULT": "#f8fafc",
+        "paper": "#ffffff",
+        "description": "Slate 50 for app bg, White for cards"
+      },
+      "status": {
+        "success": "#059669",
+        "warning": "#d97706",
+        "error": "#e11d48",
+        "info": "#3b82f6"
+      },
+      "border": {
+        "DEFAULT": "#e2e8f0",
+        "subtle": "#f1f5f9"
+      }
+    },
+    "gradients": {
+      "dashboard_card": "bg-gradient-to-br from-white to-slate-50",
+      "active_nav": "bg-slate-100"
+    }
+  },
+  "layout": {
+    "spacing_scale": "Generous - use p-6 or p-8 for containers",
+    "grid_system": {
+      "dashboard": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6",
+      "form": "grid grid-cols-1 md:grid-cols-2 gap-8",
+      "card_grid": "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+    },
+    "containers": {
+      "main": "max-w-7xl mx-auto p-6 lg:p-8",
+      "card": "bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow duration-200"
+    },
+    "sidebar": {
+      "width": "w-64",
+      "collapsed_width": "w-20",
+      "bg": "bg-white border-r border-slate-200"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-slate-900 text-white hover:bg-slate-800 shadow-sm rounded-md px-4 py-2 font-medium transition-all active:scale-95",
+      "secondary": "bg-white text-slate-900 border border-slate-200 hover:bg-slate-50 shadow-sm rounded-md px-4 py-2 font-medium transition-all active:scale-95",
+      "ghost": "text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md px-3 py-2 transition-colors",
+      "destructive": "bg-red-600 text-white hover:bg-red-700 shadow-sm rounded-md px-4 py-2 font-medium"
+    },
+    "inputs": {
+      "default": "flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+      "large": "h-12 text-lg px-4"
+    },
+    "cards": {
+      "kpi": "p-6 flex flex-col justify-between h-full bg-white rounded-xl border border-slate-200 shadow-sm",
+      "table_container": "rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+    },
+    "badges": {
+      "stock_ok": "inline-flex items-center rounded-full border border-emerald-200 px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-950 focus:ring-offset-2 text-emerald-700 bg-emerald-50",
+      "stock_low": "inline-flex items-center rounded-full border border-amber-200 px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-amber-950 focus:ring-offset-2 text-amber-700 bg-amber-50",
+      "stock_critical": "inline-flex items-center rounded-full border border-rose-200 px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-rose-950 focus:ring-offset-2 text-rose-700 bg-rose-50"
+    }
+  },
+  "visual_enhancers": {
+    "shadows": {
+      "soft": "shadow-[0_2px_8px_rgba(0,0,0,0.04)]",
+      "medium": "shadow-[0_4px_16px_rgba(0,0,0,0.08)]",
+      "hover": "shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+    },
+    "borders": {
+      "subtle": "border border-slate-100",
+      "default": "border border-slate-200",
+      "active": "border-slate-900"
+    },
+    "radius": {
+      "default": "rounded-lg",
+      "card": "rounded-xl",
+      "button": "rounded-md"
+    }
+  },
+  "assets": {
+    "icons": {
+      "library": "lucide-react",
+      "style": "Stroke width 1.5px or 2px for clarity"
+    },
+    "images": {
+      "login_bg": "https://images.unsplash.com/photo-1771574206309-eda78f8afd03?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTJ8MHwxfHNlYXJjaHw0fHxwcm9mZXNzaW9uYWwlMjBraXRjaGVuJTIwY2hlZiUyMGNvb2tpbmd8ZW58MHx8fHwxNzczMzUxNDIzfDA&ixlib=rb-4.1.0&q=85",
+      "placeholder_food": "https://images.unsplash.com/photo-1589071635294-8d3d604f4d56?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNDR8MHwxfHNlYXJjaHwyfHxmcmVzaCUyMHZlZ2V0YWJsZXMlMjBtZWF0JTIwZGFpcnklMjBpbmdyZWRpZW50c3xlbnwwfHx8fDE3NzMzNTE0Mjh8MA&ixlib=rb-4.1.0&q=85",
+      "logo_placeholder": "Use text 'Lacucina' in Chivo font, bold, tracking-tighter"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Use 'lucide-react' for all icons.",
+    "Implement a responsive sidebar layout. Collapsible on mobile.",
+    "Use 'recharts' for dashboard charts (Stock levels, Consumption trends).",
+    "Use 'sonner' for all toast notifications (Success, Error).",
+    "Ensure all forms have client-side validation using Zod + React Hook Form.",
+    "For the 'Daily Entry' page, optimize for speed: use large inputs, auto-focus, and keyboard navigation support.",
+    "The 'Order Generation' page must have a clear 'Preview' mode before confirming.",
+    "Use 'jspdf' or similar for PDF generation.",
+    "Strictly follow the color palette. Do not use random colors.",
+    "Add 'data-testid' to all interactive elements."
+  ],
+  "universal_guidelines": [
+    "Don't make generic centered layouts.",
+    "Create depth through layered design elements.",
+    "Every interaction needs micro-animations.",
+    "Use 2-3x more spacing than feels comfortable.",
+    "Never use AI assistant Emoji characters.",
+    "Prioritize using pre-existing components from src/components/ui."
+  ]
+}
