@@ -1,34 +1,211 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+/* Lacucina App Styles */
+
+.app-container {
+    min-height: 100vh;
+    display: flex;
+    background-color: #f8fafc;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+.page-content {
+    flex: 1;
+    padding: 1.5rem;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+@media (min-width: 1024px) {
+    .page-content {
+        padding: 2rem;
     }
 }
 
-.App-header {
-    background-color: #0f0f10;
+/* Login page */
+.login-container {
     min-height: 100vh;
     display: flex;
-    flex-direction: column;
+}
+
+.login-image {
+    flex: 1;
+    background-size: cover;
+    background-position: center;
+    position: relative;
+}
+
+.login-image::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.7) 0%, rgba(15, 23, 42, 0.5) 100%);
+}
+
+.login-form {
+    flex: 1;
+    display: flex;
     align-items: center;
     justify-content: center;
-    font-size: calc(10px + 2vmin);
+    padding: 2rem;
+    background: white;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 256px;
+    background: white;
+    border-right: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.3s ease;
+}
+
+.sidebar-collapsed {
+    width: 80px;
+}
+
+.sidebar-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    color: #64748b;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    margin: 0.125rem 0.5rem;
+}
+
+.sidebar-nav-item:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+.sidebar-nav-item.active {
+    background: #0f172a;
     color: white;
 }
 
-.App-link {
-    color: #61dafb;
+/* Header */
+.app-header {
+    height: 64px;
+    background: white;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.5rem;
+    position: sticky;
+    top: 0;
+    z-index: 40;
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
+/* Dashboard cards */
+.kpi-card {
+    background: white;
+    border-radius: 0.75rem;
+    border: 1px solid #e2e8f0;
+    padding: 1.5rem;
+    transition: all 0.2s ease;
+}
+
+.kpi-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* Tables */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table th {
+    text-align: left;
+    padding: 0.75rem 1rem;
+    background: #f8fafc;
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.data-table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.data-table tr:hover td {
+    background: #f8fafc;
+}
+
+/* Form elements */
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 0.5rem;
+}
+
+/* Unit selector */
+.unit-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: #f8fafc;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.unit-selector:hover {
+    background: #f1f5f9;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+    .sidebar {
+        position: fixed;
+        left: -256px;
+        top: 0;
+        bottom: 0;
+        z-index: 50;
     }
-    to {
-        transform: rotate(360deg);
+
+    .sidebar.open {
+        left: 0;
+    }
+
+    .sidebar-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 40;
+    }
+}
+
+/* Print styles */
+@media print {
+    .sidebar,
+    .app-header,
+    .no-print {
+        display: none !important;
+    }
+
+    .page-content {
+        padding: 0;
     }
 }
