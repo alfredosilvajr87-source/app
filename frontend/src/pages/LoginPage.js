@@ -1,0 +1,222 @@
+import { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { toast } from 'sonner';
+import { ChefHat, Mail, Lock, User } from 'lucide-react';
+
+const LoginPage = () => {
+  const { login, register } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+  const [registerForm, setRegisterForm] = useState({ email: '', password: '', name: '' });
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await login(loginForm.email, loginForm.password);
+      toast.success('Welcome back!');
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await register(registerForm.email, registerForm.password, registerForm.name);
+      toast.success('Account created successfully!');
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Registration failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="login-container">
+      {/* Image Section */}
+      <div
+        className="login-image hidden lg:block"
+        style={{
+          backgroundImage: `url('https://images.unsplash.com/photo-1771574206309-eda78f8afd03?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTJ8MHwxfHNlYXJjaHw0fHxwcm9mZXNzaW9uYWwlMjBraXRjaGVuJTIwY2hlZiUyMGNvb2tpbmd8ZW58MHx8fHwxNzczMzUxNDIzfDA&ixlib=rb-4.1.0&q=85')`
+        }}
+      >
+        <div className="absolute inset-0 flex items-end p-12 z-10">
+          <div className="text-white">
+            <h1 className="font-heading text-5xl font-black tracking-tight mb-4">Lacucina</h1>
+            <p className="text-xl text-white/80 max-w-md">
+              Professional kitchen inventory management. Organized. Sharp. Efficient.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Form Section */}
+      <div className="login-form">
+        <div className="w-full max-w-md space-y-8">
+          <div className="text-center lg:hidden">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <div className="p-3 bg-slate-900 rounded-xl">
+                <ChefHat className="h-8 w-8 text-white" />
+              </div>
+            </div>
+            <h1 className="font-heading text-3xl font-black tracking-tight text-slate-900">Lacucina</h1>
+            <p className="text-slate-500 mt-2">Kitchen Inventory Management</p>
+          </div>
+
+          <div className="hidden lg:block">
+            <h2 className="font-heading text-2xl font-bold text-slate-900">Welcome</h2>
+            <p className="text-slate-500 mt-1">Sign in to manage your kitchen inventory</p>
+          </div>
+
+          <Tabs defaultValue="login" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-8">
+              <TabsTrigger value="login" data-testid="login-tab">Sign In</TabsTrigger>
+              <TabsTrigger value="register" data-testid="register-tab">Create Account</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="login">
+              <Card className="border-0 shadow-none">
+                <CardContent className="p-0 space-y-6">
+                  <form onSubmit={handleLogin} className="space-y-5">
+                    <div className="space-y-2">
+                      <Label htmlFor="login-email" className="text-sm font-medium text-slate-700">
+                        Email
+                      </Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                        <Input
+                          id="login-email"
+                          data-testid="login-email-input"
+                          type="email"
+                          placeholder="chef@lacucina.com"
+                          className="pl-10 h-12"
+                          value={loginForm.email}
+                          onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="login-password" className="text-sm font-medium text-slate-700">
+                        Password
+                      </Label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                        <Input
+                          id="login-password"
+                          data-testid="login-password-input"
+                          type="password"
+                          placeholder="Enter your password"
+                          className="pl-10 h-12"
+                          value={loginForm.password}
+                          onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <Button
+                      type="submit"
+                      data-testid="login-submit-btn"
+                      className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white font-semibold"
+                      disabled={loading}
+                    >
+                      {loading ? 'Signing in...' : 'Sign In'}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="register">
+              <Card className="border-0 shadow-none">
+                <CardContent className="p-0 space-y-6">
+                  <form onSubmit={handleRegister} className="space-y-5">
+                    <div className="space-y-2">
+                      <Label htmlFor="register-name" className="text-sm font-medium text-slate-700">
+                        Full Name
+                      </Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                        <Input
+                          id="register-name"
+                          data-testid="register-name-input"
+                          type="text"
+                          placeholder="Chef Marco"
+                          className="pl-10 h-12"
+                          value={registerForm.name}
+                          onChange={(e) => setRegisterForm({ ...registerForm, name: e.target.value })}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="register-email" className="text-sm font-medium text-slate-700">
+                        Email
+                      </Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                        <Input
+                          id="register-email"
+                          data-testid="register-email-input"
+                          type="email"
+                          placeholder="chef@lacucina.com"
+                          className="pl-10 h-12"
+                          value={registerForm.email}
+                          onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="register-password" className="text-sm font-medium text-slate-700">
+                        Password
+                      </Label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                        <Input
+                          id="register-password"
+                          data-testid="register-password-input"
+                          type="password"
+                          placeholder="Create a strong password"
+                          className="pl-10 h-12"
+                          value={registerForm.password}
+                          onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
+                          required
+                          minLength={6}
+                        />
+                      </div>
+                    </div>
+
+                    <Button
+                      type="submit"
+                      data-testid="register-submit-btn"
+                      className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white font-semibold"
+                      disabled={loading}
+                    >
+                      {loading ? 'Creating account...' : 'Create Account'}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default LoginPage;
