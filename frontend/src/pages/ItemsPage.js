@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -49,6 +50,7 @@ const unitOptions = [
 ];
 
 const ItemsPage = () => {
+  const { isAdmin } = useAuth();
   const [items, setItems] = useState([]);
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -170,10 +172,12 @@ const ItemsPage = () => {
             Manage your inventory items
           </p>
         </div>
-        <Button onClick={openNewDialog} data-testid="new-item-btn" disabled={sections.length === 0}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Item
-        </Button>
+        {isAdmin && (
+          <Button onClick={openNewDialog} data-testid="new-item-btn" disabled={sections.length === 0}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Item
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
@@ -282,27 +286,29 @@ const ItemsPage = () => {
                           <td className="font-mono">{item.minimum_stock}</td>
                           <td className="font-mono">{item.average_consumption}</td>
                           <td className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleEdit(item)}
-                                data-testid={`edit-item-${item.id}`}
-                              >
-                                <Pencil className="h-4 w-4 text-slate-500" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                  setDeletingItem(item);
-                                  setDeleteDialogOpen(true);
-                                }}
-                                data-testid={`delete-item-${item.id}`}
-                              >
-                                <Trash2 className="h-4 w-4 text-slate-500" />
-                              </Button>
-                            </div>
+                            {isAdmin && (
+                              <div className="flex justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleEdit(item)}
+                                  data-testid={`edit-item-${item.id}`}
+                                >
+                                  <Pencil className="h-4 w-4 text-slate-500" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setDeletingItem(item);
+                                    setDeleteDialogOpen(true);
+                                  }}
+                                  data-testid={`delete-item-${item.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4 text-slate-500" />
+                                </Button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       ))}
