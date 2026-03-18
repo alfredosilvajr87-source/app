@@ -360,8 +360,9 @@ async def register_first_user(email: EmailStr, password: str, name: str, company
         raise HTTPException(status_code=400, detail="Email already registered")
     
     # Create company
+    company_id = str(uuid.uuid4())
     company_doc = {
-        "id": str(uuid.uuid4()),
+        "id": company_id,
         "name": company_name,
         "logo_url": "",
         "created_at": datetime.now(timezone.utc).isoformat()
@@ -369,29 +370,35 @@ async def register_first_user(email: EmailStr, password: str, name: str, company
     await db.companies.insert_one(company_doc)
     
     # Create admin user
+    user_id = str(uuid.uuid4())
     user_doc = {
-        "id": str(uuid.uuid4()),
+        "id": user_id,
         "email": email,
         "password": hash_password(password),
         "name": name,
-        "company_id": company_doc["id"],
+        "company_id": company_id,
         "role": "admin",
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.users.insert_one(user_doc)
     
-    token = create_token(user_doc["id"], user_doc["email"], user_doc["company_id"], user_doc["role"])
+    token = create_token(user_id, email, company_id, "admin")
     return {
         "token": token,
         "user": {
-            "id": user_doc["id"],
-            "email": user_doc["email"],
-            "name": user_doc["name"],
-            "company_id": user_doc["company_id"],
-            "company_name": company_doc["name"],
-            "role": user_doc["role"]
+            "id": user_id,
+            "email": email,
+            "name": name,
+            "company_id": company_id,
+            "company_name": company_name,
+            "role": "admin"
         },
-        "company": company_doc
+        "company": {
+            "id": company_id,
+            "name": company_name,
+            "logo_url": "",
+            "created_at": company_doc["created_at"]
+        }
     }
 
 @api_router.post("/auth/login", response_model=dict)
