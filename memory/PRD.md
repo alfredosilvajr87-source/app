@@ -38,7 +38,7 @@ Professional kitchen inventory management for multiple companies/units with:
 - [x] Reports: Dashboard KPIs, Stock Status, Consumption, Orders History
 - [x] Responsive UI for tablets, phones, and desktop
 
-## What's Been Implemented (Jan 2026)
+## What's Been Implemented (Mar 2026)
 
 ### Backend V2 (FastAPI + MongoDB)
 - Multi-tenant company system with logo upload
@@ -51,6 +51,12 @@ Professional kitchen inventory management for multiple companies/units with:
 - Amendment orders for completed orders
 - PDF generation with user info and timestamps
 - Reports with PDF export endpoints
+- **V3 Item Features (Mar 2026):**
+  - Minimum stock per day of week (minimum_stock_by_day)
+  - Item visibility per unit (visible_in_units)
+  - New units of measure: bottle, bucket, can, bag, pack
+  - Duplicate item prevention (same name + section + unit)
+  - Password reset flow (forgot password)
 
 ### Frontend V2 (React)
 - New login with company creation for first user
@@ -63,11 +69,17 @@ Professional kitchen inventory management for multiple companies/units with:
 - PDF download for all reports
 - Order amendments for completed orders
 - Integer-only quantity inputs
+- **V3 Item UI (Mar 2026):**
+  - 3-tab item form: Basic Info, Min Stock, Visibility
+  - Daily minimum toggle with 7-day inputs (Mon-Sun)
+  - Unit visibility checkboxes
+  - 17 units of measure in dropdown
+  - Forgot password modal on login page
 
 ## Prioritized Backlog
 
 ### P0 - Critical (None remaining)
-All P0 features implemented
+All P0 features implemented - V3 Item Features Complete
 
 ### P1 - High Priority
 - [ ] Batch import/export of items (CSV)
@@ -79,6 +91,7 @@ All P0 features implemented
 - [ ] Purchase price tracking
 - [ ] Historical price charts
 - [ ] PWA for offline support
+- [ ] Verify order amendment logic (modify completed order generates delta only)
 
 ### P3 - Future Enhancements
 - [ ] Barcode/QR scanning
@@ -86,8 +99,13 @@ All P0 features implemented
 - [ ] Accounting system integration
 - [ ] Recipe/menu integration
 
+## Testing Summary (Mar 2026)
+- Backend: 21/21 tests passed (100%)
+- Frontend: All V3 features working correctly (100%)
+- Test credentials: uitest@test.com / TestPass123!
+
 ## Next Tasks
-1. Create the 3 Lacucina units with proper initials (LC1, LC2, LC3)
-2. Import real item catalog
+1. Create production units with proper initials
+2. Import real item catalog with daily minimums configured
 3. Train staff on daily entry workflow
 4. Configure safety stock increments for each day

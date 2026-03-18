@@ -162,11 +162,14 @@ code {
 [data-testid="emergent-badge"],
 .emergent-badge,
 [class*="emergent"],
-a[href*="emergentagent.com"]:not([data-testid]) {
+a[href*="emergentagent.com"]:not([data-testid]),
+div[style*="position: fixed"][style*="bottom"] a[href*="emergent"],
+div[style*="position: fixed"][style*="right"] a[href*="emergent"],
+div[style*="fixed"][style*="bottom"][style*="right"],
+iframe[src*="emergent"],
+div:has(> a[href*="emergent"]) {
     display: none !important;
-}
-
-/* Alternative: position it out of the way */
-div[style*="position: fixed"][style*="bottom"] a[href*="emergent"] {
-    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
 }
