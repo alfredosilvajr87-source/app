@@ -446,6 +446,19 @@ async def change_password(data: PasswordChange, user: dict = Depends(get_current
     )
     return {"message": "Password changed successfully"}
 
+@api_router.post("/auth/reset-password")
+async def reset_password(email: EmailStr, new_password: str):
+    """Reset password for a user by email (simplified - no email verification)"""
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="Email not found")
+    
+    await db.users.update_one(
+        {"email": email},
+        {"$set": {"password": hash_password(new_password)}}
+    )
+    return {"message": "Password reset successfully. You can now login with your new password."}
+
 # ==================== USER MANAGEMENT (Admin) ====================
 
 @api_router.get("/users", response_model=List[UserResponse])
