@@ -1,4 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { cn } from '../../lib/utils';
 import {
   LayoutDashboard,
@@ -9,22 +10,30 @@ import {
   Settings,
   ChefHat,
   ChevronLeft,
-  Layers
+  Layers,
+  Users,
+  Lock
 } from 'lucide-react';
 import { Button } from '../ui/button';
 
-const navItems = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/sections', label: 'Sections', icon: Layers },
-  { path: '/items', label: 'Items', icon: Package },
-  { path: '/daily-entry', label: 'Daily Entry', icon: ClipboardList },
-  { path: '/orders', label: 'Orders', icon: ShoppingCart },
-  { path: '/reports', label: 'Reports', icon: BarChart3 },
-  { path: '/settings', label: 'Settings', icon: Settings },
-];
-
 const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {
   const location = useLocation();
+  const { isAdmin } = useAuth();
+
+  const navItems = [
+    { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/sections', label: 'Sections', icon: Layers, adminOnly: true },
+    { path: '/items', label: 'Items', icon: Package },
+    { path: '/daily-entry', label: 'Daily Entry', icon: ClipboardList },
+    { path: '/orders', label: 'Orders', icon: ShoppingCart },
+    { path: '/reports', label: 'Reports', icon: BarChart3 },
+    { path: '/settings', label: 'Settings', icon: Settings },
+  ];
+
+  // Add Users management for admin only
+  if (isAdmin) {
+    navItems.splice(navItems.length - 1, 0, { path: '/users', label: 'Users', icon: Users, adminOnly: true });
+  }
 
   return (
     <>
@@ -53,9 +62,10 @@ const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {
             </div>
             {!collapsed && (
               <div className="overflow-hidden">
-                <h1 className="font-heading text-xl font-black tracking-tight text-slate-900">
-                  Lacucina
+                <h1 className="font-heading text-lg font-black tracking-tight text-slate-900">
+                  Inventory
                 </h1>
+                <p className="text-xs text-slate-500">Management</p>
               </div>
             )}
           </div>
@@ -66,6 +76,9 @@ const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
+            const isDisabled = item.adminOnly && !isAdmin;
+            
+            if (isDisabled) return null;
             
             return (
               <NavLink
@@ -79,7 +92,12 @@ const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {
                 )}
               >
                 <Icon className="h-5 w-5 flex-shrink-0" />
-                {!collapsed && <span>{item.label}</span>}
+                {!collapsed && (
+                  <span className="flex items-center gap-2">
+                    {item.label}
+                    {item.adminOnly && <Lock className="h-3 w-3 text-blue-500" />}
+                  </span>
+                )}
               </NavLink>
             );
           })}

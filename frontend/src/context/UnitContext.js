@@ -7,7 +7,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const UnitContext = createContext(null);
 
 export const UnitProvider = ({ children }) => {
-  const { token } = useAuth();
+  const { token, isAdmin } = useAuth();
   const [units, setUnits] = useState([]);
   const [currentUnit, setCurrentUnit] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -23,7 +23,6 @@ export const UnitProvider = ({ children }) => {
       const res = await axios.get(`${API}/units`);
       setUnits(res.data);
       
-      // Set first unit as default if none selected
       const savedUnitId = localStorage.getItem('currentUnitId');
       if (res.data.length > 0) {
         const savedUnit = res.data.find(u => u.id === savedUnitId);
