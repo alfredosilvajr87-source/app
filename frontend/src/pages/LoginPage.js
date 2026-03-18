@@ -181,6 +181,17 @@ const LoginPage = () => {
                     >
                       {loading ? 'Signing in...' : 'Sign In'}
                     </Button>
+
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="w-full text-slate-500"
+                      onClick={() => setResetDialogOpen(true)}
+                      data-testid="forgot-password-btn"
+                    >
+                      <KeyRound className="h-4 w-4 mr-2" />
+                      Forgot password?
+                    </Button>
                   </form>
                 </CardContent>
               </Card>
