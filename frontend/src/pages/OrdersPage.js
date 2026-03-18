@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useUnit } from '../context/UnitContext';
+import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -33,20 +34,19 @@ import {
   ShoppingCart,
   CalendarIcon,
   Download,
-  Mail,
+  Share2,
   CheckCircle2,
   Clock,
-  XCircle,
   Trash2,
-  Eye,
   FileText,
-  Send
+  Edit
 } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const OrdersPage = () => {
   const { currentUnit } = useUnit();
+  const { user, company } = useAuth();
   const [orders, setOrders] = useState([]);
   const [calculatedOrder, setCalculatedOrder] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -55,12 +55,12 @@ const OrdersPage = () => {
   const [targetDate, setTargetDate] = useState(new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [amendDialogOpen, setAmendDialogOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [emailRecipients, setEmailRecipients] = useState('');
   const [orderNotes, setOrderNotes] = useState('');
   const [editedQuantities, setEditedQuantities] = useState({});
+  const [amendItems, setAmendItems] = useState([]);
 
   useEffect(() => {
     if (currentUnit) {
@@ -87,7 +87,6 @@ const OrdersPage = () => {
       const res = await axios.get(`${API}/orders/${currentUnit.id}/calculate?target_date=${dateStr}`);
       setCalculatedOrder(res.data);
       
-      // Initialize edited quantities
       const quantities = {};
       res.data.items.forEach(item => {
         quantities[item.item_id] = item.adjusted_quantity;
@@ -112,8 +111,8 @@ const OrdersPage = () => {
           section_id: item.section_id,
           section_name: item.section_name,
           unit_of_measure: item.unit_of_measure,
-          calculated_quantity: item.calculated_quantity,
-          adjusted_quantity: editedQuantities[item.item_id]
+          calculated_quantity: Math.round(item.calculated_quantity),
+          adjusted_quantity: Math.round(editedQuantities[item.item_id])
         }));
 
       if (items.length === 0) {
@@ -154,24 +153,42 @@ const OrdersPage = () => {
     }
   };
 
-  const sendEmail = async () => {
-    if (!emailRecipients.trim()) {
-      toast.error('Please enter at least one email');
-      return;
-    }
-
-    const recipients = emailRecipients.split(',').map(e => e.trim()).filter(Boolean);
-    
+  const sharePdf = async (orderId) => {
     try {
-      await axios.post(`${API}/orders/${selectedOrder.id}/email`, { 
-        order_id: selectedOrder.id,
-        recipients 
-      });
-      toast.success(`Email sent to ${recipients.length} recipient(s)`);
-      setEmailDialogOpen(false);
-      setEmailRecipients('');
+      const res = await axios.get(`${API}/orders/${orderId}/pdf`);
+      
+      // Convert base64 to blob
+      const byteCharacters = atob(res.data.pdf_base64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+      const file = new File([blob], res.data.filename, { type: 'application/pdf' });
+
+      if (navigator.share && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: res.data.share_title,
+          text: res.data.share_text,
+          files: [file]
+        });
+        toast.success('Shared successfully');
+      } else if (navigator.share) {
+        // Share without file
+        await navigator.share({
+          title: res.data.share_title,
+          text: res.data.share_text
+        });
+        toast.success('Shared successfully');
+      } else {
+        // Fallback: download
+        downloadPdf(orderId);
+      }
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to send email');
+      if (err.name !== 'AbortError') {
+        toast.error('Failed to share');
+      }
     }
   };
 
@@ -182,6 +199,47 @@ const OrdersPage = () => {
       fetchOrders();
     } catch (err) {
       toast.error('Failed to update order');
+    }
+  };
+
+  const openAmendDialog = (order) => {
+    setSelectedOrder(order);
+    setAmendItems(order.items.map(item => ({
+      ...item,
+      new_quantity: item.adjusted_quantity
+    })));
+    setAmendDialogOpen(true);
+  };
+
+  const createAmendment = async () => {
+    const changedItems = amendItems.filter(item => item.new_quantity !== item.adjusted_quantity && item.new_quantity > 0);
+    
+    if (changedItems.length === 0) {
+      toast.warning('No changes to submit');
+      return;
+    }
+
+    try {
+      await axios.post(`${API}/orders/${selectedOrder.id}/amendment`, {
+        order_id: selectedOrder.id,
+        items: changedItems.map(item => ({
+          item_id: item.item_id,
+          item_name: item.item_name,
+          section_id: item.section_id,
+          section_name: item.section_name,
+          unit_of_measure: item.unit_of_measure,
+          calculated_quantity: Math.round(item.new_quantity - item.adjusted_quantity),
+          adjusted_quantity: Math.round(item.new_quantity - item.adjusted_quantity)
+        })),
+        notes: 'Quantity adjustment'
+      });
+
+      toast.success('Amendment order created');
+      setAmendDialogOpen(false);
+      setSelectedOrder(null);
+      fetchOrders();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to create amendment');
     }
   };
 
@@ -204,7 +262,6 @@ const OrdersPage = () => {
     switch (status) {
       case 'pending': return <Clock className="h-4 w-4 text-amber-600" />;
       case 'completed': return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
-      case 'cancelled': return <XCircle className="h-4 w-4 text-slate-400" />;
       default: return null;
     }
   };
@@ -236,7 +293,7 @@ const OrdersPage = () => {
         <CardHeader>
           <CardTitle className="font-heading text-lg">Generate New Order</CardTitle>
           <CardDescription>
-            Calculate order based on safety stock and average consumption
+            Calculate order based on minimum stock + day adjustment and average consumption
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -307,9 +364,12 @@ const OrdersPage = () => {
                       <div className="flex items-center gap-4">
                         {getStatusIcon(order.status)}
                         <div>
-                          <p className="font-medium">Order for {order.target_date}</p>
+                          <p className="font-medium font-mono">{order.order_number}</p>
                           <p className="text-sm text-slate-500">
-                            {order.items.length} items · Created {new Date(order.created_at).toLocaleDateString()}
+                            {order.items.length} items · Target: {order.target_date}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            Created by {order.created_by_name} · {new Date(order.created_at).toLocaleString()}
                           </p>
                         </div>
                       </div>
@@ -326,14 +386,11 @@ const OrdersPage = () => {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            setSelectedOrder(order);
-                            setEmailDialogOpen(true);
-                          }}
-                          data-testid={`email-order-${order.id}`}
+                          onClick={() => sharePdf(order.id)}
+                          data-testid={`share-order-${order.id}`}
                         >
-                          <Mail className="h-4 w-4 mr-1" />
-                          Email
+                          <Share2 className="h-4 w-4 mr-1" />
+                          Share
                         </Button>
                         <Button
                           variant="outline"
@@ -375,27 +432,50 @@ const OrdersPage = () => {
           ) : (
             <div className="space-y-4">
               {completedOrders.map((order) => (
-                <Card key={order.id} className="opacity-75" data-testid={`order-${order.id}`}>
+                <Card key={order.id} className="opacity-90" data-testid={`order-${order.id}`}>
                   <CardContent className="py-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div className="flex items-center gap-4">
                         {getStatusIcon(order.status)}
                         <div>
-                          <p className="font-medium">Order for {order.target_date}</p>
+                          <p className="font-medium font-mono">{order.order_number}</p>
                           <p className="text-sm text-slate-500">
-                            {order.items.length} items · Completed {order.completed_at ? new Date(order.completed_at).toLocaleDateString() : ''}
+                            {order.items.length} items · {order.target_date}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            Completed: {order.completed_at ? new Date(order.completed_at).toLocaleString() : '-'}
                           </p>
                         </div>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => downloadPdf(order.id)}
-                        data-testid={`download-pdf-${order.id}`}
-                      >
-                        <Download className="h-4 w-4 mr-1" />
-                        PDF
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => downloadPdf(order.id)}
+                          data-testid={`download-pdf-${order.id}`}
+                        >
+                          <Download className="h-4 w-4 mr-1" />
+                          PDF
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => sharePdf(order.id)}
+                          data-testid={`share-order-${order.id}`}
+                        >
+                          <Share2 className="h-4 w-4 mr-1" />
+                          Share
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openAmendDialog(order)}
+                          data-testid={`amend-order-${order.id}`}
+                        >
+                          <Edit className="h-4 w-4 mr-1" />
+                          Amend
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -423,8 +503,8 @@ const OrdersPage = () => {
                   <p className="font-medium">{calculatedOrder.target_date}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-slate-500">Safety Stock</p>
-                  <p className="font-medium">{calculatedOrder.safety_percentage}%</p>
+                  <p className="text-sm text-slate-500">Day Increment</p>
+                  <p className="font-medium">+{calculatedOrder.quantity_increment} units</p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">Items</p>
@@ -445,7 +525,7 @@ const OrdersPage = () => {
                         <th>Item</th>
                         <th>Section</th>
                         <th>Current</th>
-                        <th>Calculated</th>
+                        <th>Needed</th>
                         <th>Order Qty</th>
                       </tr>
                     </thead>
@@ -455,7 +535,7 @@ const OrdersPage = () => {
                           <td className="font-medium">{item.item_name}</td>
                           <td className="text-slate-500">{item.section_name}</td>
                           <td className="font-mono">
-                            {item.current_stock} {item.unit_of_measure}
+                            {Math.round(item.current_stock)} {item.unit_of_measure}
                           </td>
                           <td className="font-mono">
                             {item.calculated_quantity} {item.unit_of_measure}
@@ -463,13 +543,13 @@ const OrdersPage = () => {
                           <td>
                             <Input
                               type="number"
-                              step="0.01"
+                              step="1"
                               min="0"
                               className="w-24 font-mono"
                               value={editedQuantities[item.item_id] || 0}
                               onChange={(e) => setEditedQuantities({
                                 ...editedQuantities,
-                                [item.item_id]: parseFloat(e.target.value) || 0
+                                [item.item_id]: Math.round(parseFloat(e.target.value)) || 0
                               })}
                               data-testid={`order-qty-${item.item_id}`}
                             />
@@ -508,36 +588,56 @@ const OrdersPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Email Dialog */}
-      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
-        <DialogContent data-testid="email-dialog">
+      {/* Amendment Dialog */}
+      <Dialog open={amendDialogOpen} onOpenChange={setAmendDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="amend-dialog">
           <DialogHeader>
-            <DialogTitle className="font-heading">Send Order via Email</DialogTitle>
+            <DialogTitle className="font-heading">Amend Order {selectedOrder?.order_number}</DialogTitle>
             <DialogDescription>
-              The order PDF will be attached to the email
+              Adjust quantities. Only changed items will be included in the amendment order.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Recipients</Label>
-              <Input
-                placeholder="email1@example.com, email2@example.com"
-                value={emailRecipients}
-                onChange={(e) => setEmailRecipients(e.target.value)}
-                data-testid="email-recipients-input"
-              />
-              <p className="text-xs text-slate-500">
-                Separate multiple emails with commas
-              </p>
-            </div>
+
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Original Qty</th>
+                  <th>New Qty</th>
+                </tr>
+              </thead>
+              <tbody>
+                {amendItems.map((item, index) => (
+                  <tr key={item.item_id}>
+                    <td className="font-medium">{item.item_name}</td>
+                    <td className="font-mono">{item.adjusted_quantity} {item.unit_of_measure}</td>
+                    <td>
+                      <Input
+                        type="number"
+                        step="1"
+                        min="0"
+                        className="w-24 font-mono"
+                        value={item.new_quantity}
+                        onChange={(e) => {
+                          const newItems = [...amendItems];
+                          newItems[index].new_quantity = Math.round(parseFloat(e.target.value)) || 0;
+                          setAmendItems(newItems);
+                        }}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEmailDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setAmendDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={sendEmail} data-testid="send-email-btn">
-              <Send className="h-4 w-4 mr-2" />
-              Send Email
+            <Button onClick={createAmendment} data-testid="create-amendment-btn">
+              Create Amendment Order
             </Button>
           </DialogFooter>
         </DialogContent>
