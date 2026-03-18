@@ -355,10 +355,9 @@ async def register(user: UserCreate):
 @api_router.post("/auth/register-first", response_model=dict)
 async def register_first_user(email: EmailStr, password: str, name: str, company_name: str):
     """Register first user and create their company"""
-    try:
-        existing = await db.users.find_one({"email": email}, {"_id": 0})
-        if existing:
-            raise HTTPException(status_code=400, detail="Email already registered")
+    existing = await db.users.find_one({"email": email}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
     
     # Create company
     company_doc = {
@@ -394,11 +393,6 @@ async def register_first_user(email: EmailStr, password: str, name: str, company
         },
         "company": company_doc
     }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Registration error: {str(e)}")
-        raise HTTPException(status_code=400, detail="Registration failed. Please try again.")
 
 @api_router.post("/auth/login", response_model=dict)
 async def login(credentials: UserLogin):
