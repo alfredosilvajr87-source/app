@@ -76,18 +76,12 @@ class KitchenInventoryV2Tester:
         """Test first user registration with company creation"""
         print("\n🏢 Testing First User Registration with Company Creation...")
         
-        # Use test credentials from review request
+        # Use test credentials from review request - register-first uses query params
         success, response = self.run_test(
             "Register First User with Company",
             "POST",
-            "auth/register-first",
-            200,
-            data={
-                "email": "admin@testkitchen.com",
-                "password": "admin123456", 
-                "name": "Admin User",
-                "company_name": "Test Kitchen Co"
-            }
+            "auth/register-first?email=admin@testkitchen.com&password=admin123456&name=Admin%20User&company_name=Test%20Kitchen%20Co",
+            200
         )
         
         if success and 'token' in response:
