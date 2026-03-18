@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -64,6 +65,7 @@ const iconOptions = [
 ];
 
 const SectionsPage = () => {
+  const { isAdmin } = useAuth();
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -142,10 +144,12 @@ const SectionsPage = () => {
             Organize your inventory into categories
           </p>
         </div>
-        <Button onClick={openNewDialog} data-testid="new-section-btn">
-          <Plus className="h-4 w-4 mr-2" />
-          New Section
-        </Button>
+        {isAdmin && (
+          <Button onClick={openNewDialog} data-testid="new-section-btn">
+            <Plus className="h-4 w-4 mr-2" />
+            New Section
+          </Button>
+        )}
       </div>
 
       {/* Sections Grid */}
@@ -193,27 +197,29 @@ const SectionsPage = () => {
                     <div className="p-3 bg-slate-100 rounded-lg">
                       <IconComponent className="h-6 w-6 text-slate-700" />
                     </div>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(section)}
-                        data-testid={`edit-section-${section.id}`}
-                      >
-                        <Pencil className="h-4 w-4 text-slate-500" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setDeletingSection(section);
-                          setDeleteDialogOpen(true);
-                        }}
-                        data-testid={`delete-section-${section.id}`}
-                      >
-                        <Trash2 className="h-4 w-4 text-slate-500" />
-                      </Button>
-                    </div>
+                    {isAdmin && (
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(section)}
+                          data-testid={`edit-section-${section.id}`}
+                        >
+                          <Pencil className="h-4 w-4 text-slate-500" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setDeletingSection(section);
+                            setDeleteDialogOpen(true);
+                          }}
+                          data-testid={`delete-section-${section.id}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-slate-500" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                   <h3 className="font-heading text-lg font-semibold text-slate-900 mb-1">
                     {section.name}
