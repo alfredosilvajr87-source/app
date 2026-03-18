@@ -6,8 +6,16 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
 import { toast } from 'sonner';
-import { ChefHat, Mail, Lock, User, Building2 } from 'lucide-react';
+import { ChefHat, Mail, Lock, User, Building2, KeyRound } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -17,6 +25,9 @@ const LoginPage = () => {
   const [companies, setCompanies] = useState([]);
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [registerForm, setRegisterForm] = useState({ email: '', password: '', name: '', companyName: '' });
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [resetForm, setResetForm] = useState({ email: '', newPassword: '', confirmPassword: '' });
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     fetchCompanies();
@@ -54,6 +65,30 @@ const LoginPage = () => {
       toast.error(err.response?.data?.detail || 'Registration failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (resetForm.newPassword !== resetForm.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    if (resetForm.newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+    setResetting(true);
+    try {
+      await axios.post(`${API}/auth/reset-password?email=${encodeURIComponent(resetForm.email)}&new_password=${encodeURIComponent(resetForm.newPassword)}`);
+      toast.success('Password reset successfully! You can now login.');
+      setResetDialogOpen(false);
+      setResetForm({ email: '', newPassword: '', confirmPassword: '' });
+      setLoginForm({ ...loginForm, email: resetForm.email });
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to reset password');
+    } finally {
+      setResetting(false);
     }
   };
 
