@@ -122,13 +122,26 @@ class SectionResponse(BaseModel):
     icon: str
     created_at: str
 
-# Item
+# Item - Updated with minimum stock per day and visibility settings
+class MinimumStockByDay(BaseModel):
+    monday: float = 0
+    tuesday: float = 0
+    wednesday: float = 0
+    thursday: float = 0
+    friday: float = 0
+    saturday: float = 0
+    sunday: float = 0
+
 class ItemCreate(BaseModel):
     name: str
     section_id: str
-    unit_of_measure: str
-    minimum_stock: float = 0
+    unit_of_measure: str  # kg, un, cx, l, bottle, bucket, can, bag, pack, etc.
+    minimum_stock: float = 0  # Base minimum stock (kept for backward compatibility)
+    minimum_stock_by_day: Optional[MinimumStockByDay] = None  # Individual day minimums
     average_consumption: float = 0
+    item_type: str = "all"  # all, restaurant, factory
+    visible_in_units: List[str] = []  # Empty list = visible in all units
+    show_in_reports: bool = True
 
 class ItemResponse(BaseModel):
     id: str
@@ -138,8 +151,33 @@ class ItemResponse(BaseModel):
     section_name: Optional[str] = ""
     unit_of_measure: str
     minimum_stock: float
+    minimum_stock_by_day: Optional[dict] = None
     average_consumption: float
+    item_type: str = "all"
+    visible_in_units: List[str] = []
+    show_in_reports: bool = True
     created_at: str
+
+# Available units of measure
+UNITS_OF_MEASURE = [
+    {"value": "kg", "label": "Kilogram (kg)"},
+    {"value": "g", "label": "Gram (g)"},
+    {"value": "l", "label": "Liter (l)"},
+    {"value": "ml", "label": "Milliliter (ml)"},
+    {"value": "un", "label": "Unit (un)"},
+    {"value": "cx", "label": "Box (cx)"},
+    {"value": "pack", "label": "Pack"},
+    {"value": "bag", "label": "Bag"},
+    {"value": "can", "label": "Can"},
+    {"value": "bottle", "label": "Bottle"},
+    {"value": "bucket", "label": "Bucket"},
+    {"value": "jar", "label": "Jar"},
+    {"value": "tray", "label": "Tray"},
+    {"value": "dozen", "label": "Dozen"},
+    {"value": "bunch", "label": "Bunch"},
+    {"value": "slice", "label": "Slice"},
+    {"value": "portion", "label": "Portion"},
+]
 
 # Safety Stock - Now with quantity increment per day
 class SafetyStockCreate(BaseModel):
