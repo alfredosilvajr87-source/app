@@ -639,13 +639,29 @@ async def delete_section(section_id: str, user: dict = Depends(get_current_user)
 
 # ==================== ITEMS ROUTES ====================
 
+@api_router.get("/units-of-measure")
+async def get_units_of_measure():
+    """Get list of available units of measure"""
+    return UNITS_OF_MEASURE
+
 @api_router.get("/items", response_model=List[ItemResponse])
-async def get_items(user: dict = Depends(get_current_user)):
-    items = await db.items.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(1000)
+async def get_items(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    items = await db.items.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(2000)
     sections = {s["id"]: s["name"] for s in await db.sections.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(100)}
     result = []
     for item in items:
+        # Filter by unit visibility if unit_id provided
+        if unit_id:
+            visible_units = item.get("visible_in_units", [])
+            if visible_units and unit_id not in visible_units:
+                continue
+        
         item["section_name"] = sections.get(item.get("section_id", ""), "")
+        # Ensure new fields have defaults
+        item.setdefault("minimum_stock_by_day", None)
+        item.setdefault("item_type", "all")
+        item.setdefault("visible_in_units", [])
+        item.setdefault("show_in_reports", True)
         result.append(ItemResponse(**item))
     return result
 
@@ -655,6 +671,16 @@ async def create_item(item: ItemCreate, user: dict = Depends(get_current_user)):
     if not section:
         raise HTTPException(status_code=404, detail="Section not found")
     
+    # Check for duplicate item (same name, section, and unit)
+    existing = await db.items.find_one({
+        "company_id": user["company_id"],
+        "name": {"$regex": f"^{item.name}$", "$options": "i"},
+        "section_id": item.section_id,
+        "unit_of_measure": item.unit_of_measure
+    }, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Item with same name, section and unit already exists")
+    
     item_doc = {
         "id": str(uuid.uuid4()),
         "company_id": user["company_id"],
@@ -662,7 +688,11 @@ async def create_item(item: ItemCreate, user: dict = Depends(get_current_user)):
         "section_id": item.section_id,
         "unit_of_measure": item.unit_of_measure,
         "minimum_stock": item.minimum_stock,
+        "minimum_stock_by_day": item.minimum_stock_by_day.model_dump() if item.minimum_stock_by_day else None,
         "average_consumption": item.average_consumption,
+        "item_type": item.item_type,
+        "visible_in_units": item.visible_in_units,
+        "show_in_reports": item.show_in_reports,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.items.insert_one(item_doc)
@@ -671,6 +701,17 @@ async def create_item(item: ItemCreate, user: dict = Depends(get_current_user)):
 
 @api_router.put("/items/{item_id}", response_model=ItemResponse)
 async def update_item(item_id: str, item: ItemCreate, user: dict = Depends(get_current_user)):
+    # Check for duplicate (excluding current item)
+    existing = await db.items.find_one({
+        "company_id": user["company_id"],
+        "name": {"$regex": f"^{item.name}$", "$options": "i"},
+        "section_id": item.section_id,
+        "unit_of_measure": item.unit_of_measure,
+        "id": {"$ne": item_id}
+    }, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Item with same name, section and unit already exists")
+    
     result = await db.items.update_one(
         {"id": item_id, "company_id": user["company_id"]},
         {"$set": {
@@ -678,7 +719,11 @@ async def update_item(item_id: str, item: ItemCreate, user: dict = Depends(get_c
             "section_id": item.section_id,
             "unit_of_measure": item.unit_of_measure,
             "minimum_stock": item.minimum_stock,
-            "average_consumption": item.average_consumption
+            "minimum_stock_by_day": item.minimum_stock_by_day.model_dump() if item.minimum_stock_by_day else None,
+            "average_consumption": item.average_consumption,
+            "item_type": item.item_type,
+            "visible_in_units": item.visible_in_units,
+            "show_in_reports": item.show_in_reports
         }}
     )
     if result.matched_count == 0:
@@ -686,6 +731,10 @@ async def update_item(item_id: str, item: ItemCreate, user: dict = Depends(get_c
     updated = await db.items.find_one({"id": item_id}, {"_id": 0})
     section = await db.sections.find_one({"id": updated["section_id"]}, {"_id": 0})
     updated["section_name"] = section["name"] if section else ""
+    updated.setdefault("minimum_stock_by_day", None)
+    updated.setdefault("item_type", "all")
+    updated.setdefault("visible_in_units", [])
+    updated.setdefault("show_in_reports", True)
     return ItemResponse(**updated)
 
 @api_router.delete("/items/{item_id}")
