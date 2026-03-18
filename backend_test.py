@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timedelta
 
 class LacucinaAPITester:
-    def __init__(self, base_url="https://chef-inventory-mgr.preview.emergentagent.com/api"):
+    def __init__(self, base_url="https://purchase-hub-32.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.token = None
         self.tests_run = 0
