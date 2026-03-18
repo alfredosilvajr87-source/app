@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useUnit } from '../context/UnitContext';
 import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Switch } from '../components/ui/switch';
+import { Checkbox } from '../components/ui/checkbox';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -31,28 +34,44 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import {
   Package,
   Plus,
   Pencil,
   Trash2,
   Search,
-  Filter
+  Filter,
+  Factory,
+  Store,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-const unitOptions = [
-  { value: 'kg', label: 'Kilogram (kg)' },
-  { value: 'un', label: 'Unit (un)' },
-  { value: 'cx', label: 'Box (cx)' },
-  { value: 'l', label: 'Liter (l)' },
+const DAYS_OF_WEEK = [
+  { key: 'monday', label: 'Mon' },
+  { key: 'tuesday', label: 'Tue' },
+  { key: 'wednesday', label: 'Wed' },
+  { key: 'thursday', label: 'Thu' },
+  { key: 'friday', label: 'Fri' },
+  { key: 'saturday', label: 'Sat' },
+  { key: 'sunday', label: 'Sun' },
+];
+
+const ITEM_TYPES = [
+  { value: 'all', label: 'All (Restaurant & Factory)', icon: null },
+  { value: 'restaurant', label: 'Restaurant Only', icon: Store },
+  { value: 'factory', label: 'Factory Only', icon: Factory },
 ];
 
 const ItemsPage = () => {
   const { isAdmin } = useAuth();
+  const { units } = useUnit();
   const [items, setItems] = useState([]);
   const [sections, setSections] = useState([]);
+  const [unitsOfMeasure, setUnitsOfMeasure] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -60,12 +79,26 @@ const ItemsPage = () => {
   const [deletingItem, setDeletingItem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSection, setFilterSection] = useState('all');
+  const [filterType, setFilterType] = useState('all');
   const [formData, setFormData] = useState({
     name: '',
     section_id: '',
     unit_of_measure: 'kg',
     minimum_stock: 0,
-    average_consumption: 0
+    minimum_stock_by_day: {
+      monday: 0,
+      tuesday: 0,
+      wednesday: 0,
+      thursday: 0,
+      friday: 0,
+      saturday: 0,
+      sunday: 0
+    },
+    use_daily_minimum: false,
+    average_consumption: 0,
+    item_type: 'all',
+    visible_in_units: [],
+    show_in_reports: true
   });
 
   useEffect(() => {
@@ -74,12 +107,14 @@ const ItemsPage = () => {
 
   const fetchData = async () => {
     try {
-      const [itemsRes, sectionsRes] = await Promise.all([
+      const [itemsRes, sectionsRes, unitsRes] = await Promise.all([
         axios.get(`${API}/items`),
-        axios.get(`${API}/sections`)
+        axios.get(`${API}/sections`),
+        axios.get(`${API}/units-of-measure`)
       ]);
       setItems(itemsRes.data);
       setSections(sectionsRes.data);
+      setUnitsOfMeasure(unitsRes.data);
     } catch (err) {
       toast.error('Failed to load data');
     } finally {
@@ -90,11 +125,23 @@ const ItemsPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const payload = {
+        name: formData.name,
+        section_id: formData.section_id,
+        unit_of_measure: formData.unit_of_measure,
+        minimum_stock: formData.minimum_stock,
+        minimum_stock_by_day: formData.use_daily_minimum ? formData.minimum_stock_by_day : null,
+        average_consumption: formData.average_consumption,
+        item_type: formData.item_type,
+        visible_in_units: formData.visible_in_units,
+        show_in_reports: formData.show_in_reports
+      };
+
       if (editingItem) {
-        await axios.put(`${API}/items/${editingItem.id}`, formData);
+        await axios.put(`${API}/items/${editingItem.id}`, payload);
         toast.success('Item updated successfully');
       } else {
-        await axios.post(`${API}/items`, formData);
+        await axios.post(`${API}/items`, payload);
         toast.success('Item created successfully');
       }
       setDialogOpen(false);
@@ -108,12 +155,20 @@ const ItemsPage = () => {
 
   const handleEdit = (item) => {
     setEditingItem(item);
+    const hasDailyMinimum = item.minimum_stock_by_day && Object.values(item.minimum_stock_by_day).some(v => v > 0);
     setFormData({
       name: item.name,
       section_id: item.section_id,
       unit_of_measure: item.unit_of_measure,
       minimum_stock: item.minimum_stock,
-      average_consumption: item.average_consumption
+      minimum_stock_by_day: item.minimum_stock_by_day || {
+        monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0, saturday: 0, sunday: 0
+      },
+      use_daily_minimum: hasDailyMinimum,
+      average_consumption: item.average_consumption,
+      item_type: item.item_type || 'all',
+      visible_in_units: item.visible_in_units || [],
+      show_in_reports: item.show_in_reports !== false
     });
     setDialogOpen(true);
   };
@@ -136,7 +191,14 @@ const ItemsPage = () => {
       section_id: sections[0]?.id || '',
       unit_of_measure: 'kg',
       minimum_stock: 0,
-      average_consumption: 0
+      minimum_stock_by_day: {
+        monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0, saturday: 0, sunday: 0
+      },
+      use_daily_minimum: false,
+      average_consumption: 0,
+      item_type: 'all',
+      visible_in_units: [],
+      show_in_reports: true
     });
   };
 
@@ -146,10 +208,22 @@ const ItemsPage = () => {
     setDialogOpen(true);
   };
 
+  const toggleUnitVisibility = (unitId) => {
+    setFormData(prev => {
+      const current = prev.visible_in_units || [];
+      if (current.includes(unitId)) {
+        return { ...prev, visible_in_units: current.filter(id => id !== unitId) };
+      } else {
+        return { ...prev, visible_in_units: [...current, unitId] };
+      }
+    });
+  };
+
   const filteredItems = items.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesSection = filterSection === 'all' || item.section_id === filterSection;
-    return matchesSearch && matchesSection;
+    const matchesType = filterType === 'all' || item.item_type === filterType;
+    return matchesSearch && matchesSection && matchesType;
   });
 
   // Group items by section
@@ -160,6 +234,12 @@ const ItemsPage = () => {
     return acc;
   }, {});
 
+  const getItemTypeIcon = (type) => {
+    if (type === 'factory') return <Factory className="h-3 w-3 text-amber-600" />;
+    if (type === 'restaurant') return <Store className="h-3 w-3 text-blue-600" />;
+    return null;
+  };
+
   return (
     <div className="space-y-8" data-testid="items-page">
       {/* Page Header */}
@@ -169,7 +249,7 @@ const ItemsPage = () => {
             Items
           </h1>
           <p className="text-slate-500 mt-1">
-            Manage your inventory items
+            {items.length} items registered
           </p>
         </div>
         {isAdmin && (
@@ -208,6 +288,16 @@ const ItemsPage = () => {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="w-full sm:w-40" data-testid="type-filter">
+                <SelectValue placeholder="All Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="restaurant">Restaurant</SelectItem>
+                <SelectItem value="factory">Factory</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -240,14 +330,14 @@ const ItemsPage = () => {
           <CardContent className="py-16 text-center">
             <Package className="h-12 w-12 mx-auto text-slate-300 mb-4" />
             <h3 className="font-heading text-xl font-semibold text-slate-700 mb-2">
-              {searchTerm || filterSection !== 'all' ? 'No Items Found' : 'No Items Yet'}
+              {searchTerm || filterSection !== 'all' || filterType !== 'all' ? 'No Items Found' : 'No Items Yet'}
             </h3>
             <p className="text-slate-500 mb-6">
-              {searchTerm || filterSection !== 'all'
+              {searchTerm || filterSection !== 'all' || filterType !== 'all'
                 ? 'Try adjusting your search or filter'
                 : 'Add your first inventory item to get started'}
             </p>
-            {!searchTerm && filterSection === 'all' && (
+            {!searchTerm && filterSection === 'all' && isAdmin && (
               <Button onClick={openNewDialog} data-testid="empty-new-item-btn">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Item
@@ -260,7 +350,7 @@ const ItemsPage = () => {
           {Object.entries(groupedItems).map(([sectionName, sectionItems]) => (
             <Card key={sectionName} data-testid={`section-group-${sectionName}`}>
               <CardHeader className="py-4">
-                <CardTitle className="font-heading text-lg">{sectionName}</CardTitle>
+                <CardTitle className="font-heading text-lg">{sectionName} ({sectionItems.length})</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
@@ -270,8 +360,9 @@ const ItemsPage = () => {
                         <th>Name</th>
                         <th>Unit</th>
                         <th>Min Stock</th>
-                        <th>Avg Consumption</th>
-                        <th className="text-right">Actions</th>
+                        <th>Type</th>
+                        <th>Reports</th>
+                        {isAdmin && <th className="text-right">Actions</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -284,9 +375,23 @@ const ItemsPage = () => {
                             </span>
                           </td>
                           <td className="font-mono">{item.minimum_stock}</td>
-                          <td className="font-mono">{item.average_consumption}</td>
-                          <td className="text-right">
-                            {isAdmin && (
+                          <td>
+                            <div className="flex items-center gap-1">
+                              {getItemTypeIcon(item.item_type)}
+                              <span className="text-xs text-slate-500 capitalize">
+                                {item.item_type === 'all' ? '-' : item.item_type}
+                              </span>
+                            </div>
+                          </td>
+                          <td>
+                            {item.show_in_reports !== false ? (
+                              <Eye className="h-4 w-4 text-emerald-500" />
+                            ) : (
+                              <EyeOff className="h-4 w-4 text-slate-300" />
+                            )}
+                          </td>
+                          {isAdmin && (
+                            <td className="text-right">
                               <div className="flex justify-end gap-1">
                                 <Button
                                   variant="ghost"
@@ -308,8 +413,8 @@ const ItemsPage = () => {
                                   <Trash2 className="h-4 w-4 text-slate-500" />
                                 </Button>
                               </div>
-                            )}
-                          </td>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -323,100 +428,218 @@ const ItemsPage = () => {
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent data-testid="item-dialog">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="item-dialog">
           <DialogHeader>
             <DialogTitle className="font-heading">
               {editingItem ? 'Edit Item' : 'New Item'}
             </DialogTitle>
             <DialogDescription>
-              {editingItem
-                ? 'Update the item details below'
-                : 'Add a new item to your inventory'}
+              {editingItem ? 'Update the item details below' : 'Add a new item to your inventory'}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                data-testid="item-name-input"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g., Chicken Breast, Tomatoes"
-                required
-              />
-            </div>
+          <form onSubmit={handleSubmit}>
+            <Tabs defaultValue="basic" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="basic">Basic Info</TabsTrigger>
+                <TabsTrigger value="stock">Min Stock</TabsTrigger>
+                <TabsTrigger value="visibility">Visibility</TabsTrigger>
+              </TabsList>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Section</Label>
-                <Select
-                  value={formData.section_id}
-                  onValueChange={(value) => setFormData({ ...formData, section_id: value })}
-                  required
-                >
-                  <SelectTrigger data-testid="item-section-select">
-                    <SelectValue placeholder="Select section" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sections.map((section) => (
-                      <SelectItem key={section.id} value={section.id}>
-                        {section.name}
-                      </SelectItem>
+              <TabsContent value="basic" className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Name *</Label>
+                  <Input
+                    id="name"
+                    data-testid="item-name-input"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g., Chicken Breast, Tomatoes"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Section *</Label>
+                    <Select
+                      value={formData.section_id}
+                      onValueChange={(value) => setFormData({ ...formData, section_id: value })}
+                      required
+                    >
+                      <SelectTrigger data-testid="item-section-select">
+                        <SelectValue placeholder="Select section" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sections.map((section) => (
+                          <SelectItem key={section.id} value={section.id}>
+                            {section.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Unit of Measure *</Label>
+                    <Select
+                      value={formData.unit_of_measure}
+                      onValueChange={(value) => setFormData({ ...formData, unit_of_measure: value })}
+                    >
+                      <SelectTrigger data-testid="item-unit-select">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {unitsOfMeasure.map((unit) => (
+                          <SelectItem key={unit.value} value={unit.value}>
+                            {unit.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Item Type</Label>
+                  <Select
+                    value={formData.item_type}
+                    onValueChange={(value) => setFormData({ ...formData, item_type: value })}
+                  >
+                    <SelectTrigger data-testid="item-type-select">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ITEM_TYPES.map((type) => (
+                        <SelectItem key={type.value} value={type.value}>
+                          <div className="flex items-center gap-2">
+                            {type.icon && <type.icon className="h-4 w-4" />}
+                            {type.label}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500">
+                    Factory items are for production only (e.g., sauces for Napoli)
+                  </p>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="stock" className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="minimum_stock">Base Minimum Stock</Label>
+                  <Input
+                    id="minimum_stock"
+                    data-testid="item-min-stock-input"
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={formData.minimum_stock}
+                    onChange={(e) => setFormData({ ...formData, minimum_stock: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                  <div>
+                    <Label>Use different minimum per day</Label>
+                    <p className="text-xs text-slate-500">Set specific minimums for each day of the week</p>
+                  </div>
+                  <Switch
+                    checked={formData.use_daily_minimum}
+                    onCheckedChange={(checked) => setFormData({ ...formData, use_daily_minimum: checked })}
+                    data-testid="use-daily-minimum-switch"
+                  />
+                </div>
+
+                {formData.use_daily_minimum && (
+                  <div className="grid grid-cols-7 gap-2">
+                    {DAYS_OF_WEEK.map((day) => (
+                      <div key={day.key} className="space-y-1">
+                        <Label className="text-xs text-center block">{day.label}</Label>
+                        <Input
+                          type="number"
+                          step="1"
+                          min="0"
+                          className="text-center text-sm"
+                          value={formData.minimum_stock_by_day[day.key]}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            minimum_stock_by_day: {
+                              ...formData.minimum_stock_by_day,
+                              [day.key]: parseInt(e.target.value) || 0
+                            }
+                          })}
+                          data-testid={`min-stock-${day.key}`}
+                        />
+                      </div>
                     ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                  </div>
+                )}
 
-              <div className="space-y-2">
-                <Label>Unit of Measure</Label>
-                <Select
-                  value={formData.unit_of_measure}
-                  onValueChange={(value) => setFormData({ ...formData, unit_of_measure: value })}
-                >
-                  <SelectTrigger data-testid="item-unit-select">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {unitOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="average_consumption">Avg Daily Consumption</Label>
+                  <Input
+                    id="average_consumption"
+                    data-testid="item-avg-consumption-input"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.average_consumption}
+                    onChange={(e) => setFormData({ ...formData, average_consumption: parseFloat(e.target.value) || 0 })}
+                  />
+                  <p className="text-xs text-slate-500">This is auto-calculated from daily entries</p>
+                </div>
+              </TabsContent>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="minimum_stock">Minimum Stock</Label>
-                <Input
-                  id="minimum_stock"
-                  data-testid="item-min-stock-input"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.minimum_stock}
-                  onChange={(e) => setFormData({ ...formData, minimum_stock: parseFloat(e.target.value) || 0 })}
-                />
-              </div>
+              <TabsContent value="visibility" className="space-y-4 mt-4">
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                  <div>
+                    <Label>Show in Reports</Label>
+                    <p className="text-xs text-slate-500">Include this item in stock and consumption reports</p>
+                  </div>
+                  <Switch
+                    checked={formData.show_in_reports}
+                    onCheckedChange={(checked) => setFormData({ ...formData, show_in_reports: checked })}
+                    data-testid="show-in-reports-switch"
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="average_consumption">Avg Consumption</Label>
-                <Input
-                  id="average_consumption"
-                  data-testid="item-avg-consumption-input"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.average_consumption}
-                  onChange={(e) => setFormData({ ...formData, average_consumption: parseFloat(e.target.value) || 0 })}
-                />
-              </div>
-            </div>
+                <div className="space-y-3">
+                  <Label>Visible in Units</Label>
+                  <p className="text-xs text-slate-500 mb-2">
+                    Leave all unchecked to show in ALL units, or select specific units
+                  </p>
+                  {units.length === 0 ? (
+                    <p className="text-sm text-slate-400">No units created yet</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {units.map((unit) => (
+                        <div key={unit.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`unit-${unit.id}`}
+                            checked={formData.visible_in_units.includes(unit.id)}
+                            onCheckedChange={() => toggleUnitVisibility(unit.id)}
+                          />
+                          <label
+                            htmlFor={`unit-${unit.id}`}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                          >
+                            {unit.name} ({unit.initials})
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {formData.visible_in_units.length > 0 && (
+                    <p className="text-xs text-amber-600">
+                      This item will only appear in {formData.visible_in_units.length} selected unit(s)
+                    </p>
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
 
-            <DialogFooter>
+            <DialogFooter className="mt-6">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancel
               </Button>
