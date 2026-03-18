@@ -157,3 +157,16 @@ code {
         display: contents !important;
     }
 }
+
+/* Hide Emergent badge on mobile to avoid navigation issues */
+[data-testid="emergent-badge"],
+.emergent-badge,
+[class*="emergent"],
+a[href*="emergentagent.com"]:not([data-testid]) {
+    display: none !important;
+}
+
+/* Alternative: position it out of the way */
+div[style*="position: fixed"][style*="bottom"] a[href*="emergent"] {
+    display: none !important;
+}
