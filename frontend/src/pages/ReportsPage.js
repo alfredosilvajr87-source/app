@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useUnit } from '../context/UnitContext';
+import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Label } from '../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Calendar } from '../components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
@@ -15,7 +15,9 @@ import {
   TrendingUp,
   ShoppingCart,
   CalendarIcon,
-  Download
+  Download,
+  Share2,
+  FileText
 } from 'lucide-react';
 import {
   BarChart,
@@ -24,15 +26,14 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line
+  ResponsiveContainer
 } from 'recharts';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const ReportsPage = () => {
   const { currentUnit } = useUnit();
+  const { company } = useAuth();
   const [stockStatus, setStockStatus] = useState([]);
   const [consumption, setConsumption] = useState([]);
   const [ordersHistory, setOrdersHistory] = useState({ orders: [], summary: {} });
@@ -69,6 +70,70 @@ const ReportsPage = () => {
     }
   };
 
+  const downloadReportPdf = async (reportType) => {
+    try {
+      let res;
+      if (reportType === 'stock') {
+        res = await axios.get(`${API}/reports/stock-status/${currentUnit.id}/pdf`);
+      } else if (reportType === 'consumption') {
+        res = await axios.get(`${API}/reports/consumption/${currentUnit.id}/pdf?days=30`);
+      } else if (reportType === 'orders') {
+        res = await axios.get(`${API}/reports/orders-history/${currentUnit.id}/pdf?start_date=${format(dateRange.start, 'yyyy-MM-dd')}&end_date=${format(dateRange.end, 'yyyy-MM-dd')}`);
+      }
+
+      const link = document.createElement('a');
+      link.href = `data:application/pdf;base64,${res.data.pdf_base64}`;
+      link.download = res.data.filename;
+      link.click();
+      toast.success('PDF downloaded');
+    } catch (err) {
+      toast.error('Failed to generate PDF');
+    }
+  };
+
+  const shareReportPdf = async (reportType) => {
+    try {
+      let res;
+      if (reportType === 'stock') {
+        res = await axios.get(`${API}/reports/stock-status/${currentUnit.id}/pdf`);
+      } else if (reportType === 'consumption') {
+        res = await axios.get(`${API}/reports/consumption/${currentUnit.id}/pdf?days=30`);
+      } else if (reportType === 'orders') {
+        res = await axios.get(`${API}/reports/orders-history/${currentUnit.id}/pdf?start_date=${format(dateRange.start, 'yyyy-MM-dd')}&end_date=${format(dateRange.end, 'yyyy-MM-dd')}`);
+      }
+
+      const byteCharacters = atob(res.data.pdf_base64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+      const file = new File([blob], res.data.filename, { type: 'application/pdf' });
+
+      if (navigator.share && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: res.data.share_title,
+          text: res.data.share_text,
+          files: [file]
+        });
+        toast.success('Shared successfully');
+      } else if (navigator.share) {
+        await navigator.share({
+          title: res.data.share_title,
+          text: res.data.share_text
+        });
+        toast.success('Shared successfully');
+      } else {
+        downloadReportPdf(reportType);
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        toast.error('Failed to share');
+      }
+    }
+  };
+
   const exportToCsv = (data, filename) => {
     if (!data.length) return;
     
@@ -85,7 +150,7 @@ const ReportsPage = () => {
     link.download = `${filename}_${format(new Date(), 'yyyy-MM-dd')}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-    toast.success('Report exported');
+    toast.success('CSV exported');
   };
 
   if (!currentUnit) {
@@ -98,17 +163,16 @@ const ReportsPage = () => {
     );
   }
 
-  // Prepare chart data
   const stockChartData = stockStatus.slice(0, 10).map(item => ({
-    name: item.item_name.substring(0, 15),
-    current: item.current_stock,
-    minimum: item.minimum_stock
+    name: item.item_name.substring(0, 12),
+    current: Math.round(item.current_stock),
+    minimum: Math.round(item.minimum_stock)
   }));
 
   const consumptionChartData = consumption.slice(0, 10).map(item => ({
-    name: item.item_name.substring(0, 15),
-    daily: item.average_daily,
-    total: item.total_consumption
+    name: item.item_name.substring(0, 12),
+    daily: Math.round(item.average_daily * 10) / 10,
+    total: Math.round(item.total_consumption)
   }));
 
   return (
@@ -182,7 +246,25 @@ const ReportsPage = () => {
 
         {/* Stock Status Report */}
         <TabsContent value="stock" className="mt-6 space-y-6">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => shareReportPdf('stock')}
+              data-testid="share-stock-btn"
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              Share PDF
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => downloadReportPdf('stock')}
+              data-testid="download-stock-pdf-btn"
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              PDF
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -190,14 +272,14 @@ const ReportsPage = () => {
               data-testid="export-stock-btn"
             >
               <Download className="h-4 w-4 mr-2" />
-              Export CSV
+              CSV
             </Button>
           </div>
 
-          {/* Chart */}
           <Card>
             <CardHeader>
               <CardTitle className="font-heading text-lg">Current vs Minimum Stock</CardTitle>
+              <CardDescription>Generated: {format(new Date(), 'PPpp')}</CardDescription>
             </CardHeader>
             <CardContent>
               {stockChartData.length > 0 ? (
@@ -207,15 +289,15 @@ const ReportsPage = () => {
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                       <XAxis
                         dataKey="name"
-                        tick={{ fontSize: 12 }}
+                        tick={{ fontSize: 11 }}
                         angle={-45}
                         textAnchor="end"
                         height={80}
                       />
                       <YAxis tick={{ fontSize: 12 }} />
                       <Tooltip />
-                      <Bar dataKey="current" name="Current Stock" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="minimum" name="Minimum Stock" fill="#e11d48" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="current" name="Current" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="minimum" name="Minimum" fill="#e11d48" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -227,7 +309,6 @@ const ReportsPage = () => {
             </CardContent>
           </Card>
 
-          {/* Table */}
           <Card>
             <CardHeader>
               <CardTitle className="font-heading text-lg">Stock Details</CardTitle>
@@ -249,8 +330,8 @@ const ReportsPage = () => {
                       <tr key={item.item_id}>
                         <td className="font-medium">{item.item_name}</td>
                         <td className="text-slate-500">{item.section_name}</td>
-                        <td className="font-mono">{item.current_stock} {item.unit_of_measure}</td>
-                        <td className="font-mono">{item.minimum_stock} {item.unit_of_measure}</td>
+                        <td className="font-mono">{Math.round(item.current_stock)} {item.unit_of_measure}</td>
+                        <td className="font-mono">{Math.round(item.minimum_stock)} {item.unit_of_measure}</td>
                         <td>
                           <span className={`status-${item.status}`}>
                             {item.status === 'critical' ? 'Critical' : item.status === 'low' ? 'Low' : 'OK'}
@@ -267,7 +348,25 @@ const ReportsPage = () => {
 
         {/* Consumption Report */}
         <TabsContent value="consumption" className="mt-6 space-y-6">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => shareReportPdf('consumption')}
+              data-testid="share-consumption-btn"
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              Share PDF
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => downloadReportPdf('consumption')}
+              data-testid="download-consumption-pdf-btn"
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              PDF
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -275,15 +374,14 @@ const ReportsPage = () => {
               data-testid="export-consumption-btn"
             >
               <Download className="h-4 w-4 mr-2" />
-              Export CSV
+              CSV
             </Button>
           </div>
 
-          {/* Chart */}
           <Card>
             <CardHeader>
               <CardTitle className="font-heading text-lg">Average Daily Consumption</CardTitle>
-              <CardDescription>Based on last 30 days</CardDescription>
+              <CardDescription>Last 30 days · Generated: {format(new Date(), 'PPpp')}</CardDescription>
             </CardHeader>
             <CardContent>
               {consumptionChartData.length > 0 ? (
@@ -293,7 +391,7 @@ const ReportsPage = () => {
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                       <XAxis
                         dataKey="name"
-                        tick={{ fontSize: 12 }}
+                        tick={{ fontSize: 11 }}
                         angle={-45}
                         textAnchor="end"
                         height={80}
@@ -312,7 +410,6 @@ const ReportsPage = () => {
             </CardContent>
           </Card>
 
-          {/* Table */}
           <Card>
             <CardHeader>
               <CardTitle className="font-heading text-lg">Consumption Details</CardTitle>
@@ -324,8 +421,8 @@ const ReportsPage = () => {
                     <tr>
                       <th>Item</th>
                       <th>Section</th>
-                      <th>Total Consumed</th>
-                      <th>Daily Average</th>
+                      <th>Total</th>
+                      <th>Daily Avg</th>
                       <th>Entries</th>
                     </tr>
                   </thead>
@@ -334,7 +431,7 @@ const ReportsPage = () => {
                       <tr key={item.item_id}>
                         <td className="font-medium">{item.item_name}</td>
                         <td className="text-slate-500">{item.section_name}</td>
-                        <td className="font-mono">{item.total_consumption} {item.unit_of_measure}</td>
+                        <td className="font-mono">{Math.round(item.total_consumption)} {item.unit_of_measure}</td>
                         <td className="font-mono">{item.average_daily} {item.unit_of_measure}</td>
                         <td className="font-mono">{item.entries_count}</td>
                       </tr>
@@ -348,6 +445,27 @@ const ReportsPage = () => {
 
         {/* Orders History Report */}
         <TabsContent value="orders" className="mt-6 space-y-6">
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => shareReportPdf('orders')}
+              data-testid="share-orders-btn"
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              Share PDF
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => downloadReportPdf('orders')}
+              data-testid="download-orders-pdf-btn"
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              PDF
+            </Button>
+          </div>
+
           {/* Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Card className="bg-blue-50 border-blue-200">
@@ -376,12 +494,11 @@ const ReportsPage = () => {
             </Card>
           </div>
 
-          {/* Orders List */}
           <Card>
             <CardHeader>
               <CardTitle className="font-heading text-lg">Orders in Period</CardTitle>
               <CardDescription>
-                {format(dateRange.start, 'MMM d, yyyy')} - {format(dateRange.end, 'MMM d, yyyy')}
+                {format(dateRange.start, 'MMM d, yyyy')} - {format(dateRange.end, 'MMM d, yyyy')} · Generated: {format(new Date(), 'PPpp')}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -394,28 +511,26 @@ const ReportsPage = () => {
                   <table className="data-table">
                     <thead>
                       <tr>
+                        <th>Order #</th>
                         <th>Target Date</th>
                         <th>Items</th>
                         <th>Status</th>
                         <th>Created</th>
-                        <th>Completed</th>
                       </tr>
                     </thead>
                     <tbody>
                       {ordersHistory.orders.map((order) => (
                         <tr key={order.id}>
-                          <td className="font-medium">{order.target_date}</td>
+                          <td className="font-mono font-medium">{order.order_number}</td>
+                          <td>{order.target_date}</td>
                           <td className="font-mono">{order.items.length} items</td>
                           <td>
                             <span className={order.status === 'completed' ? 'status-ok' : 'status-low'}>
                               {order.status}
                             </span>
                           </td>
-                          <td className="text-slate-500">
-                            {new Date(order.created_at).toLocaleDateString()}
-                          </td>
-                          <td className="text-slate-500">
-                            {order.completed_at ? new Date(order.completed_at).toLocaleDateString() : '-'}
+                          <td className="text-slate-500 text-sm">
+                            {new Date(order.created_at).toLocaleString()}
                           </td>
                         </tr>
                       ))}
