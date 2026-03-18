@@ -283,6 +283,77 @@ const LoginPage = () => {
               </Card>
             </TabsContent>
           </Tabs>
+
+          {/* Reset Password Dialog */}
+          <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+            <DialogContent data-testid="reset-password-dialog">
+              <DialogHeader>
+                <DialogTitle className="font-heading">Reset Password</DialogTitle>
+                <DialogDescription>
+                  Enter your email and a new password to reset your account
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="reset-email">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                    <Input
+                      id="reset-email"
+                      data-testid="reset-email-input"
+                      type="email"
+                      placeholder="your@email.com"
+                      className="pl-10"
+                      value={resetForm.email}
+                      onChange={(e) => setResetForm({ ...resetForm, email: e.target.value })}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reset-new-password">New Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                    <Input
+                      id="reset-new-password"
+                      data-testid="reset-new-password-input"
+                      type="password"
+                      placeholder="New password (min 6 characters)"
+                      className="pl-10"
+                      value={resetForm.newPassword}
+                      onChange={(e) => setResetForm({ ...resetForm, newPassword: e.target.value })}
+                      required
+                      minLength={6}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reset-confirm-password">Confirm Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                    <Input
+                      id="reset-confirm-password"
+                      data-testid="reset-confirm-password-input"
+                      type="password"
+                      placeholder="Confirm new password"
+                      className="pl-10"
+                      value={resetForm.confirmPassword}
+                      onChange={(e) => setResetForm({ ...resetForm, confirmPassword: e.target.value })}
+                      required
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setResetDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={resetting} data-testid="reset-password-submit-btn">
+                    {resetting ? 'Resetting...' : 'Reset Password'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
     </div>
