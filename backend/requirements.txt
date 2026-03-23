@@ -1,5 +1,10 @@
 fastapi
 uvicorn
-python-multipart
-pydantic
 python-dotenv
+motor
+pydantic
+python-multipart
+PyJWT
+bcrypt
+reportlab
+email-validator
