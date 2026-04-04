@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 
-const API = `${process.env.REACT_APP_BACKEND_URL}`;
+const API = "https://app-dupa.onrender.com";
 
 const AuthContext = createContext(null);
 
