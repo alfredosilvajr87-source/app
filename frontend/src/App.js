@@ -14,6 +14,7 @@ import ReportsPage from "./pages/ReportsPage";
 import SettingsPage from "./pages/SettingsPage";
 import UsersPage from "./pages/UsersPage";
 import DailyPrepPage from "./pages/DailyPrepPage";
+import MasterPage from "./pages/MasterPage";
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -65,6 +66,7 @@ const AppRoutes = () => {
           </PublicRoute>
         }
       />
+      <Route path="/master" element={<MasterPage />} />
       <Route
         path="/"
         element={
