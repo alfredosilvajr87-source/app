@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: kitchen-inventory-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    plan: free
+    envVars:
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        value: lacucina_db
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://lacucina1app-alfredos-projects-4d18f4f3.vercel.app
