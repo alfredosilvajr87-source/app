@@ -1,6 +1,7 @@
 import { useAuth } from '../../context/AuthContext';
 import { useUnit } from '../../context/UnitContext';
 import { Button } from '../ui/button';
+import { useEffect, useState } from 'react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,12 +17,25 @@ import {
   User,
   LogOut,
   ChefHat,
-  Shield
+  Shield,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 const Header = ({ onMenuClick }) => {
   const { user, company, logout, isAdmin } = useAuth();
   const { units, currentUnit, selectUnit } = useUnit();
+  const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') === 'dark');
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDark]);
 
   return (
     <header className="app-header" data-testid="app-header">
@@ -91,7 +105,16 @@ const Header = ({ onMenuClick }) => {
       </div>
 
       {/* User Menu */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2">
+        {/* Dark Mode Toggle */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setIsDark(v => !v)}
+          title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+        >
+          {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
