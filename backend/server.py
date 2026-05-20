@@ -2295,6 +2295,28 @@ async def get_prep_history(user: dict = Depends(get_current_user), days: int = 7
             })
     return history
 
+@api_router.post("/seed-sections")
+async def seed_sections_compat(user: dict = Depends(get_current_user)):
+    """Compatibility route - now handled by auto_seed_company"""
+    require_admin(user)
+    result = await auto_seed_company(user["company_id"])
+    return result
+
+@api_router.post("/fix-items-team")
+async def fix_items_team(user: dict = Depends(get_current_user)):
+    """Update team field for all items based on LACUCINA_ITEMS list - admin only"""
+    require_admin(user)
+    company_id = user["company_id"]
+    team_map = {name: team for (name, _, team, _) in LACUCINA_ITEMS}
+    updated = 0
+    for name, team in team_map.items():
+        result = await db.items.update_many(
+            {"company_id": company_id, "name": {"$regex": f"^{name}$", "$options": "i"}, "team": {"$in": ["", None]}},
+            {"$set": {"team": team}}
+        )
+        updated += result.modified_count
+    return {"message": f"Updated team for {updated} items"}
+
 # ==================== ROOT ====================
 
 @api_router.get("/")

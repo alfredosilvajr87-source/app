@@ -3,7 +3,8 @@
 .app-container {
     min-height: 100vh;
     display: flex;
-    background-color: #f8fafc;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
 }
 
 .main-content {
@@ -19,6 +20,8 @@
     padding: 1.5rem;
     max-width: 100%;
     overflow-x: hidden;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
 }
 
 @media (min-width: 1024px) {
@@ -53,14 +56,14 @@
     align-items: center;
     justify-content: center;
     padding: 2rem;
-    background: white;
+    background-color: hsl(var(--background));
 }
 
 /* Sidebar */
 .sidebar {
     width: 256px;
-    background: white;
-    border-right: 1px solid #e2e8f0;
+    background-color: hsl(var(--card));
+    border-right: 1px solid hsl(var(--border));
     display: flex;
     flex-direction: column;
     transition: all 0.3s ease;
@@ -76,27 +79,27 @@
     gap: 0.75rem;
     padding: 0.75rem 1rem;
     border-radius: 0.5rem;
-    color: #64748b;
+    color: hsl(var(--muted-foreground));
     font-weight: 500;
     transition: all 0.2s ease;
     margin: 0.125rem 0.5rem;
 }
 
 .sidebar-nav-item:hover {
-    background: #f1f5f9;
-    color: #0f172a;
+    background: hsl(var(--muted));
+    color: hsl(var(--foreground));
 }
 
 .sidebar-nav-item.active {
-    background: #0f172a;
-    color: white;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
 }
 
 /* Header */
 .app-header {
     height: 64px;
-    background: white;
-    border-bottom: 1px solid #e2e8f0;
+    background-color: hsl(var(--card));
+    border-bottom: 1px solid hsl(var(--border));
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -108,9 +111,10 @@
 
 /* Dashboard cards */
 .kpi-card {
-    background: white;
+    background-color: hsl(var(--card));
+    color: hsl(var(--card-foreground));
     border-radius: 0.75rem;
-    border: 1px solid #e2e8f0;
+    border: 1px solid hsl(var(--border));
     padding: 1.5rem;
     transition: all 0.2s ease;
 }
@@ -128,22 +132,23 @@
 .data-table th {
     text-align: left;
     padding: 0.75rem 1rem;
-    background: #f8fafc;
+    background-color: hsl(var(--muted));
     font-weight: 600;
     font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #64748b;
-    border-bottom: 1px solid #e2e8f0;
+    color: hsl(var(--muted-foreground));
+    border-bottom: 1px solid hsl(var(--border));
 }
 
 .data-table td {
     padding: 0.75rem 1rem;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid hsl(var(--border));
+    color: hsl(var(--foreground));
 }
 
 .data-table tr:hover td {
-    background: #f8fafc;
+    background-color: hsl(var(--muted));
 }
 
 /* Form elements */
@@ -155,7 +160,7 @@
     display: block;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
     margin-bottom: 0.5rem;
 }
 
@@ -165,14 +170,14 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem 1rem;
-    background: #f8fafc;
+    background-color: hsl(var(--muted));
     border-radius: 0.5rem;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
 .unit-selector:hover {
-    background: #f1f5f9;
+    background-color: hsl(var(--secondary));
 }
 
 /* Mobile responsive */
