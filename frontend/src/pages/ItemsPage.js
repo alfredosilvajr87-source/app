@@ -98,7 +98,8 @@ const ItemsPage = () => {
     average_consumption: 0,
     item_type: 'all',
     visible_in_units: [],
-    show_in_reports: true
+    show_in_reports: true,
+    price: 0
   });
 
   useEffect(() => {
@@ -134,7 +135,8 @@ const ItemsPage = () => {
         average_consumption: formData.average_consumption,
         item_type: formData.item_type,
         visible_in_units: formData.visible_in_units,
-        show_in_reports: formData.show_in_reports
+        show_in_reports: formData.show_in_reports,
+        price: parseFloat(formData.price) || 0
       };
 
       if (editingItem) {
@@ -168,7 +170,8 @@ const ItemsPage = () => {
       average_consumption: item.average_consumption,
       item_type: item.item_type || 'all',
       visible_in_units: item.visible_in_units || [],
-      show_in_reports: item.show_in_reports !== false
+      show_in_reports: item.show_in_reports !== false,
+      price: item.price || 0
     });
     setDialogOpen(true);
   };
@@ -253,10 +256,24 @@ const ItemsPage = () => {
           </p>
         </div>
         {isAdmin && (
-          <Button onClick={openNewDialog} data-testid="new-item-btn" disabled={sections.length === 0}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Item
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={async () => {
+              if (!window.confirm('Import all items from La Cucina spreadsheet? Items that already exist will be skipped.')) return;
+              try {
+                const res = await axios.post(`${API}/seed-items`);
+                toast.success(res.data.message);
+                fetchData();
+              } catch (err) {
+                toast.error(err.response?.data?.detail || 'Seed failed');
+              }
+            }}>
+              Import Spreadsheet
+            </Button>
+            <Button onClick={openNewDialog} data-testid="new-item-btn" disabled={sections.length === 0}>
+              <Plus className="h-4 w-4 mr-2" />
+              New Item
+            </Button>
+          </div>
         )}
       </div>
 
@@ -588,6 +605,21 @@ const ItemsPage = () => {
                     onChange={(e) => setFormData({ ...formData, average_consumption: parseFloat(e.target.value) || 0 })}
                   />
                   <p className="text-xs text-slate-500">This is auto-calculated from daily entries</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="item-price">Unit Price (€)</Label>
+                  <Input
+                    id="item-price"
+                    data-testid="item-price-input"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={formData.price}
+                    onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                  />
+                  <p className="text-xs text-slate-500">Used for cost analysis in reports (visible to Admin only)</p>
                 </div>
               </TabsContent>
 

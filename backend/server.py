@@ -63,6 +63,7 @@ class CompanyResponse(BaseModel):
     name: str
     logo_url: str
     created_at: str
+    active: bool = True
 
 # User
 class UserCreate(BaseModel):
@@ -149,6 +150,7 @@ class ItemCreate(BaseModel):
     item_type: str = "all"  # all, restaurant, factory
     visible_in_units: List[str] = []  # Empty list = visible in all units
     show_in_reports: bool = True
+    price: Optional[float] = 0.0  # Unit price for cost analysis
 
 class ItemResponse(BaseModel):
     id: str
@@ -163,6 +165,7 @@ class ItemResponse(BaseModel):
     item_type: str = "all"
     visible_in_units: List[str] = []
     show_in_reports: bool = True
+    price: Optional[float] = 0.0
     created_at: str
 
 # Available units of measure
@@ -279,11 +282,13 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         user = await db.users.find_one({"id": payload["user_id"]}, {"_id": 0})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
+        # Block access if company is inactive
+        company = await db.companies.find_one({"id": user.get("company_id")}, {"_id": 0})
+        if company and not company.get("active", True):
+            raise HTTPException(status_code=403, detail="Company account is inactive. Contact the administrator.")
         return user
     except JWTError:
         raise HTTPException(status_code=401, detail="Token expired")
-    # JWTError already caught above
-        raise HTTPException(status_code=401, detail="Invalid token")
 
 def require_admin(user: dict):
     if user.get("role") != "admin":
@@ -364,6 +369,19 @@ async def superadmin_list_companies(master_key: str = ""):
         user_count = await db.users.count_documents({"company_id": c["id"]})
         result.append({**c, "user_count": user_count})
     return result
+
+@api_router.patch("/superadmin/companies/{company_id}/toggle")
+async def superadmin_toggle_company(company_id: str, master_key: str = ""):
+    """Activate or deactivate a company - requires MASTER_KEY"""
+    if not MASTER_KEY or master_key != MASTER_KEY:
+        raise HTTPException(status_code=403, detail="Invalid master key")
+    company = await db.companies.find_one({"id": company_id}, {"_id": 0})
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    new_status = not company.get("active", True)
+    await db.companies.update_one({"id": company_id}, {"$set": {"active": new_status}})
+    status_text = "activated" if new_status else "deactivated"
+    return {"message": f"Company '{company['name']}' {status_text}", "active": new_status}
 
 @api_router.delete("/superadmin/companies/{company_id}")
 async def superadmin_delete_company(company_id: str, master_key: str = ""):
@@ -768,6 +786,7 @@ async def create_item(item: ItemCreate, user: dict = Depends(get_current_user)):
         "item_type": item.item_type,
         "visible_in_units": item.visible_in_units,
         "show_in_reports": item.show_in_reports,
+        "price": item.price or 0.0,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.items.insert_one(item_doc)
@@ -798,7 +817,8 @@ async def update_item(item_id: str, item: ItemCreate, user: dict = Depends(get_c
             "average_consumption": item.average_consumption,
             "item_type": item.item_type,
             "visible_in_units": item.visible_in_units,
-            "show_in_reports": item.show_in_reports
+            "show_in_reports": item.show_in_reports,
+            "price": item.price or 0.0
         }}
     )
     if result.matched_count == 0:
@@ -810,6 +830,7 @@ async def update_item(item_id: str, item: ItemCreate, user: dict = Depends(get_c
     updated.setdefault("item_type", "all")
     updated.setdefault("visible_in_units", [])
     updated.setdefault("show_in_reports", True)
+    updated.setdefault("price", 0.0)
     return ItemResponse(**updated)
 
 @api_router.delete("/items/{item_id}")
@@ -1601,6 +1622,234 @@ async def seed_data(user: dict = Depends(get_current_user)):
     await db.items.insert_many(items)
     
     return {"message": "Data seeded successfully", "sections": len(sections), "items": len(items)}
+
+    return {"message": "Data seeded successfully", "sections": len(sections), "items": len(items)}
+
+@api_router.post("/seed-items")
+async def seed_items_from_spreadsheet(user: dict = Depends(get_current_user)):
+    """Seed all items from La Cucina spreadsheet with PAR by day of week - admin only"""
+    require_admin(user)
+    company_id = user["company_id"]
+
+    # Get or create sections
+    section_names = ["Stock Items", "Other Supplies", "Pizza", "Dry", "Sauces & Ready Food",
+                     "Vegetables", "Frozen", "Meat", "Dairy", "Drinks", "Packaging", "Fruit", "Melts"]
+    sections_map = {}
+    for sname in section_names:
+        sec = await db.sections.find_one({"company_id": company_id, "name": sname}, {"_id": 0})
+        if not sec:
+            sec = {"id": str(uuid.uuid4()), "company_id": company_id, "name": sname,
+                   "description": "", "icon": "Package", "created_at": datetime.now(timezone.utc).isoformat()}
+            await db.sections.insert_one(sec)
+        sections_map[sname] = sec["id"]
+
+    # All items from spreadsheet: (name, section, unit, par_by_day)
+    # par_by_day: Mon, Tue, Wed, Thu, Fri, Sat, Sun
+    ITEMS = [
+        # Stock Items
+        ("Coffee Beans", "Stock Items", "kg", [8,8,8,8,8,10,8]),
+        ("Decaf Coffee", "Stock Items", "bag", [2,2,2,2,2,2,2]),
+        ("Matcha", "Stock Items", "bag", [1,2,2,2,2,2,2]),
+        ("Chai Latte", "Stock Items", "tub", [1,1,1,1,1,1,1]),
+        ("Hot Choc Powder", "Stock Items", "tub", [1,1,1,1,2,2,1]),
+        ("Spray Cream", "Stock Items", "un", [1,2,1,1,1,2,1]),
+        ("Full Fat Milk", "Stock Items", "l", [2,4,3,4,5,6,2]),
+        ("Low Fat Milk", "Stock Items", "l", [1,1,1,1,2,2,1]),
+        ("Coconut Milk", "Stock Items", "l", [6,6,8,8,8,8,6]),
+        ("Oat Milk", "Stock Items", "l", [12,12,12,12,18,18,12]),
+        ("White Sugar", "Stock Items", "bag", [1,1,1,1,1,1,1]),
+        ("Brown Sugar", "Stock Items", "bag", [1,1,1,1,1,1,1]),
+        ("Ketchup", "Stock Items", "un", [1,1,1,1,1,1,1]),
+        ("Vinegar", "Stock Items", "btl", [1,1,1,1,1,1,1]),
+        ("Salt Sachets", "Stock Items", "pack", [1,1,1,1,1,1,1]),
+        ("Pepper Sachets", "Stock Items", "pack", [1,1,1,1,1,1,1]),
+        ("Jam", "Stock Items", "un", [1,1,1,1,1,1,1]),
+        ("Tea Bags", "Stock Items", "pack", [1,1,1,1,1,1,1]),
+        # Drinks
+        ("Coke", "Drinks", "un", [1,1,1,1,1,1,1]),
+        ("Coke Zero", "Drinks", "un", [1,1,1,1,1,2,1]),
+        ("San Pell Orange", "Drinks", "un", [1,1,1,1,1,1,1]),
+        ("Sparkling Water", "Drinks", "un", [1,1,1,1,1,1,1]),
+        ("Still Water", "Drinks", "un", [1,1,1,1,1,1,1]),
+        ("Apple Juice", "Drinks", "un", [1,1,1,1,1,1,1]),
+        ("Moretti", "Drinks", "un", [1,1,1,1,1,1,1]),
+        ("Tropical Soda", "Drinks", "un", [1,1,1,1,1,1,1]),
+        ("Lemon Soda", "Drinks", "un", [1,1,1,1,1,1,1]),
+        ("B.Orange Soda", "Drinks", "un", [1,1,1,1,1,1,1]),
+        ("Raffo", "Drinks", "un", [1,1,1,1,1,1,1]),
+        # Melts
+        ("Chicken (Melt)", "Melts", "un", [12,12,10,12,14,16,10]),
+        ("Tuna (Melt)", "Melts", "un", [5,5,5,5,6,8,4]),
+        ("Veggie (Melt)", "Melts", "un", [3,3,3,3,4,6,3]),
+        ("Ham & Cheese (Melt)", "Melts", "un", [6,6,6,6,8,10,5]),
+        ("Focaccia (Melt)", "Melts", "un", [8,8,8,8,10,12,6]),
+        ("Avo Club (Melt)", "Melts", "un", [6,6,6,6,8,10,5]),
+        # Pizza
+        ("12\" Dough", "Pizza", "un", [3,5,3,5,7,10,3]),
+        ("20\" Dough", "Pizza", "un", [2,4,2,3,5,5,2]),
+        ("Pizza Sauce", "Pizza", "un", [2,2,1,2,2,4,1]),
+        ("Pizza Mozzarella", "Pizza", "kg", [4,8,5,6,8,12,5]),
+        # Sauces & Ready Food
+        ("Veg Stock", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
+        ("Bolognese Sauce", "Sauces & Ready Food", "tray", [2,2,2,2,2,3,1]),
+        ("Napoli Sauce", "Sauces & Ready Food", "tray", [2,2,2,2,3,5,1]),
+        ("Soup", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
+        ("Green Pesto", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
+        ("Hot Honey", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
+        ("Lasagne (TRAY)", "Sauces & Ready Food", "tray", [1,1,1,1,1,1,1]),
+        ("Lasagne for 2", "Sauces & Ready Food", "un", [4,4,4,4,6,6,4]),
+        ("Dijon Dressing", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
+        ("Mayonnaise 5L", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
+        ("Vine Tomato", "Sauces & Ready Food", "un", [1,2,1,2,2,3,2]),
+        ("Sundried Tomato", "Sauces & Ready Food", "un", [1,1,1,1,2,2,1]),
+        ("Avocado (case/20)", "Sauces & Ready Food", "case", [1,1,1,1,1,1,1]),
+        ("Garlic", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
+        ("Garlic Puree", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
+        ("Chilli Peppers", "Sauces & Ready Food", "un", [6,6,6,6,6,6,6]),
+        ("Balsamic Glaze", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
+        ("Relish", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
+        # Vegetables
+        ("Rocket (Bag)", "Vegetables", "bag", [4,6,5,6,8,10,6]),
+        ("Spinach (Bag)", "Vegetables", "bag", [4,6,5,6,8,10,6]),
+        ("Lettuce (Bag)", "Vegetables", "bag", [4,6,6,6,8,12,6]),
+        ("Peppers (single)", "Vegetables", "un", [8,6,6,8,10,12,10]),
+        ("Red Onion (/kg)", "Vegetables", "kg", [1,1,1,1,1,2,1]),
+        ("Sweetcorn (can)", "Vegetables", "can", [2,2,2,2,2,2,2]),
+        ("Courgette", "Vegetables", "un", [4,6,4,8,8,12,6]),
+        ("Mushroom", "Vegetables", "kg", [1,1,1,2,2,2,2]),
+        # Frozen
+        ("Chips (/bag)", "Frozen", "bag", [4,6,5,6,10,12,5]),
+        ("Acai", "Frozen", "un", [3,3,3,3,4,5,3]),
+        ("Peas (Frozen)", "Frozen", "bag", [1,1,1,1,1,1,1]),
+        ("Vanilla Ice Cream", "Frozen", "un", [1,1,1,1,1,1,1]),
+        ("Prawns", "Frozen", "kg", [1,1,1,2,2,3,1]),
+        ("Diced Chicken Bags", "Frozen", "bag", [1,3,1,2,3,6,1]),
+        ("Breakfast Bacon", "Frozen", "kg", [1,1,1,1,1,2,1]),
+        ("French Toast", "Frozen", "un", [1,1,1,1,1,2,1]),
+        ("Ice (Bag)", "Frozen", "bag", [1,2,2,2,5,3,1]),
+        # Dry
+        ("Olive Oil", "Dry", "btl", [1,2,1,2,2,3,1]),
+        ("Oil Spray", "Dry", "un", [1,1,1,1,1,1,1]),
+        ("Honey (/btl)", "Dry", "btl", [1,1,1,1,1,1,1]),
+        ("Chia Seed", "Dry", "un", [1,1,1,1,1,1,1]),
+        ("Chilli Oil", "Dry", "btl", [1,1,1,1,1,1,1]),
+        ("Salt (bucket)", "Dry", "un", [1,1,1,1,1,1,1]),
+        ("Cooking White Wine", "Dry", "btl", [1,1,1,1,1,2,1]),
+        ("Bread", "Dry", "un", [5,6,6,6,8,10,4]),
+        ("Egg Yolk", "Dry", "un", [1,1,1,1,1,2,1]),
+        ("Peanut Butter (bucket)", "Dry", "un", [2,2,2,2,2,3,2]),
+        ("Penne (/5kg)", "Dry", "bag", [2,2,2,2,2,3,1]),
+        ("Spaghetti (/5kg)", "Dry", "bag", [2,2,2,2,2,2,1]),
+        ("Gluten Free Penne (/400g)", "Dry", "bag", [2,2,2,2,2,4,2]),
+        ("Granola", "Dry", "un", [1,1,1,1,1,1,1]),
+        ("Focaccia Bread", "Dry", "un", [1,1,2,2,2,4,1]),
+        ("Flour", "Dry", "kg", [1,1,1,1,1,1,1]),
+        ("Dry Funghi", "Dry", "un", [1,1,1,1,1,1,1]),
+        ("Kinder Bueno", "Dry", "un", [1,1,1,1,1,1,1]),
+        ("Nutella", "Dry", "un", [1,1,1,1,1,1,1]),
+        ("Biscoff Biscuits", "Dry", "pack", [1,1,1,1,1,1,1]),
+        # Meat
+        ("Sausages (/kg)", "Meat", "kg", [2,3,3,4,5,6,2]),
+        ("Black Pudding (box)", "Meat", "box", [1,1,1,1,2,2,1]),
+        ("Pepperoni (/pack)", "Meat", "pack", [4,5,3,4,6,8,4]),
+        ("Parma Ham (/tray 500g)", "Meat", "tray", [2,2,2,2,2,3,1]),
+        ("Nduja", "Meat", "un", [1,1,1,1,1,1,1]),
+        ("Goujons (/kg)", "Meat", "kg", [2,2,2,2,2,3,2]),
+        ("Pancetta (/kg)", "Meat", "kg", [6,7,5,6,8,10,4]),
+        ("Ham", "Meat", "kg", [1,2,1,2,2,3,1]),
+        # Dairy
+        ("Butter 454g", "Dairy", "un", [1,1,1,1,1,1,1]),
+        ("Cream", "Dairy", "l", [6,8,6,8,10,12,4]),
+        ("Parmesan 1kg", "Dairy", "kg", [3,4,4,5,8,10,4]),
+        ("Parmesan Shaving (/kg)", "Dairy", "kg", [1,1,1,1,1,1,1]),
+        ("Straciatella", "Dairy", "un", [4,6,4,6,10,12,5]),
+        ("Buffalo Mozzarella", "Dairy", "un", [3,5,3,3,5,6,4]),
+        # Fruit
+        ("Pineapple (1 can)", "Fruit", "can", [2,2,2,2,2,2,2]),
+        ("Banana (pcs)", "Fruit", "un", [10,10,8,10,12,20,8]),
+        ("Blueberry", "Fruit", "un", [4,4,4,4,6,8,3]),
+        ("Strawberry", "Fruit", "un", [6,8,4,6,10,12,4]),
+        ("Lemon (/pcs)", "Fruit", "un", [10,10,10,10,10,20,10]),
+        # Other Supplies
+        ("D9 (Grill & Oven)", "Other Supplies", "un", [1,1,1,1,1,1,1]),
+        ("D5 (Descaler)", "Other Supplies", "un", [1,1,1,1,1,1,1]),
+        ("D10", "Other Supplies", "un", [1,1,1,1,1,1,1]),
+        ("Degreaser", "Other Supplies", "un", [1,1,1,1,1,1,1]),
+        ("Gloves L", "Other Supplies", "pack", [2,2,2,2,2,2,2]),
+        ("Heavy Duty Gloves", "Other Supplies", "pack", [2,2,2,2,2,2,2]),
+        ("Kitchen Printer Inks", "Other Supplies", "un", [2,2,2,3,2,2,2]),
+        ("Pot Scrub", "Other Supplies", "un", [1,1,1,1,1,1,1]),
+        ("Rinse Clear", "Other Supplies", "un", [1,1,1,1,1,1,1]),
+        ("Blue Roll", "Other Supplies", "roll", [1,1,1,1,1,2,1]),
+        ("Soap", "Other Supplies", "un", [1,1,1,1,1,1,1]),
+        ("Sponge", "Other Supplies", "un", [1,1,1,1,1,1,1]),
+        ("Suma Combi+", "Other Supplies", "un", [1,1,1,1,1,1,1]),
+        ("Fairy Liquid", "Other Supplies", "un", [1,1,1,1,1,1,1]),
+        ("Glass Cleaner", "Other Supplies", "un", [1,1,1,1,1,1,1]),
+        ("Cif", "Other Supplies", "un", [1,1,1,1,1,1,1]),
+        ("Toilet Paper", "Other Supplies", "roll", [1,1,1,1,1,1,1]),
+        ("Kitchen Printer Roll", "Other Supplies", "roll", [3,1,6,6,6,6,1]),
+        ("Tin Foil", "Other Supplies", "un", [1,1,1,1,1,1,1]),
+        ("Bin Bags (Black)", "Other Supplies", "pack", [1,1,1,1,1,1,1]),
+        ("Bin Bags (Clear)", "Other Supplies", "pack", [1,1,1,1,1,1,1]),
+        # Packaging
+        ("12\" Boxes", "Packaging", "pack", [1,1,1,1,1,1,1]),
+        ("20\" Boxes", "Packaging", "pack", [1,1,1,1,1,1,1]),
+        ("Small Foil Cont+Lids", "Packaging", "pack", [1,1,1,1,1,1,1]),
+        ("Burger Box Sml", "Packaging", "pack", [1,1,2,2,2,3,1]),
+        ("Burger Box Lge", "Packaging", "pack", [1,1,1,1,2,2,1]),
+        ("Chip Bags", "Packaging", "pack", [1,1,1,1,1,1,1]),
+        ("2oz cups+lids", "Packaging", "pack", [1,1,1,1,3,2,1]),
+        ("Pasta Cont+Lids", "Packaging", "pack", [3,3,3,4,5,6,4]),
+        ("Clear Pasta Cont", "Packaging", "pack", [1,1,1,1,2,2,4]),
+        ("Small Salad Cont", "Packaging", "pack", [1,1,1,1,1,1,1]),
+        ("Large Salad Cont", "Packaging", "pack", [1,1,1,1,1,1,1]),
+        ("Salad Cont Lids", "Packaging", "pack", [1,1,1,1,1,1,1]),
+        ("T/A Forks", "Packaging", "pack", [1,1,1,1,1,1,1]),
+        ("T/A Knives", "Packaging", "pack", [1,1,1,1,1,1,1]),
+        ("T/A Spoons", "Packaging", "pack", [1,1,1,1,1,1,1]),
+        ("Wooden Stirers", "Packaging", "pack", [1,1,1,1,1,1,1]),
+        ("Napkins (/pack)", "Packaging", "pack", [2,2,2,2,3,3,2]),
+        ("12oz Cups", "Packaging", "pack", [6,6,6,6,6,8,6]),
+        ("8oz cups", "Packaging", "pack", [3,3,3,3,3,4,3]),
+        ("12oz Lids", "Packaging", "pack", [2,2,2,2,2,3,2]),
+        ("8oz Lids", "Packaging", "pack", [1,1,1,1,1,2,1]),
+    ]
+
+    days_keys = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"]
+    created = 0
+    skipped = 0
+
+    for (name, section_name, unit, pars) in ITEMS:
+        sec_id = sections_map.get(section_name)
+        if not sec_id:
+            continue
+        # Skip if already exists
+        existing = await db.items.find_one({"company_id": company_id, "name": {"$regex": f"^{name}$", "$options": "i"}}, {"_id": 0})
+        if existing:
+            skipped += 1
+            continue
+        avg_par = round(sum(pars) / 7, 1)
+        par_by_day = {days_keys[i]: pars[i] for i in range(7)}
+        item_doc = {
+            "id": str(uuid.uuid4()),
+            "company_id": company_id,
+            "name": name,
+            "section_id": sec_id,
+            "unit_of_measure": unit,
+            "minimum_stock": avg_par,
+            "minimum_stock_by_day": par_by_day,
+            "average_consumption": avg_par,
+            "item_type": "all",
+            "visible_in_units": [],
+            "show_in_reports": True,
+            "price": 0.0,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.items.insert_one(item_doc)
+        created += 1
+
+    return {"message": f"Seed complete: {created} items created, {skipped} already existed", "created": created, "skipped": skipped}
 
 # ==================== DAILY PREP CHECKLIST ====================
 
