@@ -256,35 +256,10 @@ const ItemsPage = () => {
           </p>
         </div>
         {isAdmin && (
-          <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" size="sm" onClick={async () => {
-              try {
-                const res = await axios.post(`${API}/seed-sections`);
-                toast.success(res.data.message);
-                fetchData();
-              } catch (err) {
-                toast.error(err.response?.data?.detail || 'Failed to create sections');
-              }
-            }}>
-              Create Sections
-            </Button>
-            <Button variant="outline" onClick={async () => {
-              if (!window.confirm('Import all items from La Cucina spreadsheet? Items that already exist will be skipped.')) return;
-              try {
-                const res = await axios.post(`${API}/seed-items`);
-                toast.success(res.data.message);
-                fetchData();
-              } catch (err) {
-                toast.error(err.response?.data?.detail || 'Seed failed');
-              }
-            }}>
-              Import Spreadsheet
-            </Button>
-            <Button onClick={openNewDialog} data-testid="new-item-btn" disabled={sections.length === 0}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Item
-            </Button>
-          </div>
+          <Button onClick={openNewDialog} data-testid="new-item-btn" disabled={sections.length === 0}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Item
+          </Button>
         )}
       </div>
 
@@ -631,6 +606,20 @@ const ItemsPage = () => {
                     onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
                   />
                   <p className="text-xs text-slate-500">Used for cost analysis in reports (visible to Admin only)</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Team</Label>
+                  <div className="flex gap-2">
+                    {['', 'Front', 'Kitchen'].map(t => (
+                      <button key={t} type="button"
+                        onClick={() => setFormData({ ...formData, team: t })}
+                        className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${formData.team === t ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
+                        {t === '' ? 'All' : t === 'Front' ? '☕ Front' : '🍳 Kitchen'}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500">Define which team is responsible for this item</p>
                 </div>
               </TabsContent>
 

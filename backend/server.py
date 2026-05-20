@@ -143,14 +143,15 @@ class MinimumStockByDay(BaseModel):
 class ItemCreate(BaseModel):
     name: str
     section_id: str
-    unit_of_measure: str  # kg, un, cx, l, bottle, bucket, can, bag, pack, etc.
-    minimum_stock: float = 0  # Base minimum stock (kept for backward compatibility)
-    minimum_stock_by_day: Optional[MinimumStockByDay] = None  # Individual day minimums
+    unit_of_measure: str
+    minimum_stock: float = 0
+    minimum_stock_by_day: Optional[MinimumStockByDay] = None
     average_consumption: float = 0
-    item_type: str = "all"  # all, restaurant, factory
-    visible_in_units: List[str] = []  # Empty list = visible in all units
+    item_type: str = "all"
+    visible_in_units: List[str] = []
     show_in_reports: bool = True
-    price: Optional[float] = 0.0  # Unit price for cost analysis
+    price: Optional[float] = 0.0
+    team: Optional[str] = ""  # "Front", "Kitchen", or ""
 
 class ItemResponse(BaseModel):
     id: str
@@ -166,6 +167,7 @@ class ItemResponse(BaseModel):
     visible_in_units: List[str] = []
     show_in_reports: bool = True
     price: Optional[float] = 0.0
+    team: Optional[str] = ""
     created_at: str
 
 # Available units of measure
@@ -737,10 +739,262 @@ async def get_units_of_measure():
     """Get list of available units of measure"""
     return UNITS_OF_MEASURE
 
+# ==================== AUTO SEED ====================
+
+LACUCINA_SECTIONS = [
+    "Stock Items", "Milks", "Soft Drinks", "Melts", "Other Supplies",
+    "Packaging", "Protein Balls", "Pizza", "Sauces & Ready Food",
+    "Vegetables", "Frozen", "Dairy", "Dry", "Meat", "Fruit", "Herbs"
+]
+
+LACUCINA_ITEMS = [
+    # (name, section, team, [Mon,Tue,Wed,Thu,Fri,Sat,Sun])
+    ("Coffee Beans", "Stock Items", "Front", [8,8,8,8,8,10,8]),
+    ("Decaf Coffee", "Stock Items", "Front", [2,2,2,2,2,2,2]),
+    ("Matcha", "Stock Items", "Front", [1,2,2,2,2,2,2]),
+    ("Chai Latte", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("Hot Choc Powder", "Stock Items", "Front", [1,1,1,1,2,2,1]),
+    ("Spray Cream", "Stock Items", "Front", [1,2,1,1,1,2,1]),
+    ("Baci (Box)", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("Baci (Bag)", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("Marshmallow", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("Paper Bag / Brown Paper Bag", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("Tea bags", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("White Sugar", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("Brown Sugar", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("Ketchup", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("Vinegar", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("Salt Sachets", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("Pepper Sachets", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("Jam", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("12oz Cups", "Stock Items", "Front", [6,7,6,6,6,10,6]),
+    ("8oz cups", "Stock Items", "Front", [3,4,3,3,3,8,3]),
+    ("12oz Lids", "Stock Items", "Front", [2,2,2,2,2,3,2]),
+    ("8oz Lids", "Stock Items", "Front", [1,1,1,1,1,2,1]),
+    ("12oz Cold Cups", "Stock Items", "Front", [2,2,2,2,2,2,2]),
+    ("Flat Lids", "Stock Items", "Front", [2,2,2,2,2,2,2]),
+    ("Vanilla Syrup", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("Caramel Syrup", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("Hazelnut Syrup", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("Strawberry Puree", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("Mango Puree", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("Blueberry Puree", "Stock Items", "Front", [1,1,1,1,1,1,1]),
+    ("pistachio sauce", "Stock Items", "Kitchen", [1,1,1,1,1,1,1]),
+    ("bueno sauce", "Stock Items", "Kitchen", [1,1,1,1,1,1,1]),
+    ("biscoff sauce", "Stock Items", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Full Fat Milk", "Milks", "Front", [2,4,3,4,5,6,2]),
+    ("Low Fat Milk", "Milks", "Front", [1,1,1,1,2,2,1]),
+    ("Coconut Milk", "Milks", "Front", [6,6,8,8,8,8,6]),
+    ("Oat Milk", "Milks", "Front", [12,12,12,12,18,18,12]),
+    ("Coke", "Soft Drinks", "Front", [1,1,1,1,1,1,1]),
+    ("Coke Zero", "Soft Drinks", "Front", [1,1,1,1,1,2,1]),
+    ("San Pell Orange", "Soft Drinks", "Front", [1,1,1,1,1,1,1]),
+    ("Sparkling Water", "Soft Drinks", "Front", [1,1,1,1,1,1,1]),
+    ("Still Water", "Soft Drinks", "Front", [1,1,1,1,1,1,1]),
+    ("Apple Juice", "Soft Drinks", "Front", [1,1,1,1,1,1,1]),
+    ("Moretti", "Soft Drinks", "Front", [1,1,1,1,1,1,1]),
+    ("Raffo", "Soft Drinks", "Front", [1,1,1,1,1,1,1]),
+    ("Chicken (melt)", "Melts", "Kitchen", [12,20,20,25,25,30,12]),
+    ("Tuna (melt)", "Melts", "Kitchen", [5,6,5,6,8,12,5]),
+    ("Veggie (melt)", "Melts", "Kitchen", [3,5,3,5,5,6,5]),
+    ("Ham&Cheese (melt)", "Melts", "Kitchen", [6,8,8,10,10,12,6]),
+    ("Focaccia (melt)", "Melts", "Kitchen", [8,10,8,10,12,15,8]),
+    ("Avo Club (melt)", "Melts", "Kitchen", [6,6,6,8,6,6,6]),
+    ("D9 (Grill & Oven)", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
+    ("D5 (Descaler)", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
+    ("D10", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Degreaser", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Gloves L", "Other Supplies", "Kitchen", [2,2,2,2,2,2,2]),
+    ("Heavy Duty Gloves", "Other Supplies", "Kitchen", [2,2,2,2,2,2,2]),
+    ("Kitchen Printer Inks", "Other Supplies", "Kitchen", [2,2,2,3,2,2,2]),
+    ("Pot Scrub", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Rinse Clear", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Blue Roll", "Other Supplies", "Kitchen", [1,1,1,1,1,2,1]),
+    ("Soap", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Sponge", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Suma Combi+", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Fairy Liquid", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Glass Cleaner", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Cif", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Toilet Paper", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Kitchen Printer Roll", "Other Supplies", "Kitchen", [3,1,6,6,6,6,1]),
+    ('12" Boxes', "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
+    ('20" Boxes', "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Small Foil Cont+Lids", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Burger Box Sml", "Packaging", "Kitchen", [1,1,2,2,2,3,1]),
+    ("Burger Box Lge", "Packaging", "Kitchen", [1,1,1,1,2,2,1]),
+    ("Chip Bags", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
+    ("2oz cups+lids", "Packaging", "Kitchen", [1,1,1,1,3,2,1]),
+    ("Pasta Cont+Lids", "Packaging", "Kitchen", [3,3,3,4,5,6,4]),
+    ("Clear Pasta Cont", "Packaging", "Kitchen", [1,1,1,1,2,2,4]),
+    ("Bin Bags (Black)", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Bin Bags (Clear)", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Tin Foil", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Small Salad Cont", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Large Salad Cont", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Salad Cont Lids", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
+    ("T/A Forks", "Packaging", "Front", [1,1,1,1,1,1,1]),
+    ("T/A Knives", "Packaging", "Front", [1,1,1,1,1,1,1]),
+    ("T/A Spoons", "Packaging", "Front", [1,1,1,1,1,1,1]),
+    ("Wooden Stirers", "Packaging", "Front", [1,1,1,1,1,1,1]),
+    ("Napkins (/pack)", "Packaging", "Front", [2,2,2,2,3,3,2]),
+    ("Straw", "Packaging", "Front", [1,1,1,1,1,1,1]),
+    ("Acai Containers", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Acai Lids", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Bamboo Straw", "Packaging", "Front", [2,2,2,2,2,2,2]),
+    ("Caramelised Biscuit", "Protein Balls", "Front", [1,1,1,1,1,1,1]),
+    ("Kinder White Choc", "Protein Balls", "Front", [1,1,1,1,1,1,1]),
+    ("Pistachio", "Protein Balls", "Front", [1,1,1,1,1,1,1]),
+    ("Peanut Butter", "Protein Balls", "Front", [1,1,1,1,1,1,1]),
+    ('12" Dough', "Pizza", "Kitchen", [3,5,3,5,7,10,3]),
+    ('20" Dough', "Pizza", "Kitchen", [2,4,2,3,5,5,2]),
+    ("Pizza Sauce", "Sauces & Ready Food", "Kitchen", [2,2,1,2,2,4,1]),
+    ("Veg Stock", "Sauces & Ready Food", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Bolognese Sce", "Sauces & Ready Food", "Kitchen", [2,2,2,2,2,3,1]),
+    ("Napoli Sauce", "Sauces & Ready Food", "Kitchen", [2,2,2,2,3,5,1]),
+    ("Soup", "Sauces & Ready Food", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Green Pesto", "Sauces & Ready Food", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Hot Honey", "Sauces & Ready Food", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Lasagne (TRAY)", "Sauces & Ready Food", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Dijon Dressing", "Sauces & Ready Food", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Mayonnaise 5L", "Sauces & Ready Food", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Lasagne for 2", "Sauces & Ready Food", "Kitchen", [4,4,4,4,6,6,4]),
+    ("Vine Tomato", "Vegetables", "Kitchen", [1,2,1,2,2,3,2]),
+    ("Sundried Tomato", "Vegetables", "Kitchen", [1,1,1,1,2,2,1]),
+    ("Avocado (case/20)", "Vegetables", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Courgette", "Vegetables", "Kitchen", [4,6,4,8,8,12,6]),
+    ("Mushroom", "Vegetables", "Kitchen", [1,1,1,2,2,2,2]),
+    ("Rocket (Bag)", "Vegetables", "Kitchen", [4,6,5,6,8,10,6]),
+    ("Spinach (Bag)", "Vegetables", "Kitchen", [4,6,5,6,8,10,6]),
+    ("Lettuce (Bag)", "Vegetables", "Kitchen", [4,6,6,6,8,12,6]),
+    ("Peppers (single)", "Vegetables", "Kitchen", [8,6,6,8,10,12,10]),
+    ("Red Onion (/kg)", "Vegetables", "Kitchen", [1,1,1,1,1,2,1]),
+    ("Sweetcorn (can)", "Vegetables", "Kitchen", [2,2,2,2,2,2,2]),
+    ("Garlic", "Vegetables", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Garlic Puree", "Vegetables", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Chilli Peppers", "Frozen", "Kitchen", [6,6,6,6,6,6,6]),
+    ("Chips (/bag)", "Frozen", "Kitchen", [4,6,5,6,10,12,5]),
+    ("Acai", "Frozen", "Kitchen", [3,3,3,3,4,5,3]),
+    ("Ravioli (/box)", "Frozen", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Peas (Frozen)", "Frozen", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Vanilla Ice Cream", "Frozen", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Prawns", "Frozen", "Kitchen", [1,1,1,2,2,3,1]),
+    ("French Toast", "Frozen", "Kitchen", [0,0,0,0,1,2,1]),
+    ("Ice (Bag)", "Frozen", "Kitchen", [1,2,2,2,5,3,1]),
+    ("Ciabatta", "Frozen", "Kitchen", [1,1,1,1,1,2,1]),
+    ("Pizza Mozzarella", "Dairy", "Kitchen", [4,8,5,6,8,12,5]),
+    ("Butter 454g", "Dairy", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Butter Portion", "Dairy", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Cream", "Dairy", "Kitchen", [6,8,6,8,10,12,4]),
+    ("Parmesan 1kg", "Dairy", "Kitchen", [3,4,4,5,8,10,4]),
+    ("Parmesan Shaving (/kg)", "Dairy", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Straciatella", "Dairy", "Kitchen", [4,6,4,6,10,12,5]),
+    ("Buffalo Mozzarella", "Dairy", "Kitchen", [3,5,3,3,5,6,4]),
+    ("Olive Oil", "Dry", "Kitchen", [1,2,1,2,2,3,1]),
+    ("Oil Spray", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Honey (/btl)", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Chia Seed", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Chilli Oil", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Salt (bucket)", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Cooking White Wine", "Dry", "Kitchen", [1,1,1,1,1,2,1]),
+    ("Balsamic Glaze", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Relish", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Bread", "Dry", "Kitchen", [5,6,6,6,8,10,4]),
+    ("Egg Yolk", "Dry", "Kitchen", [1,1,1,1,1,2,1]),
+    ("Eggs", "Dry", "Kitchen", [4,6,4,5,6,8,4]),
+    ("Peanut Butter (bucket)", "Dry", "Kitchen", [2,2,2,2,2,3,2]),
+    ("Penne (/5kg)", "Dry", "Kitchen", [2,2,2,2,2,3,1]),
+    ("Spaghetti (/5kg)", "Dry", "Kitchen", [2,2,2,2,2,2,1]),
+    ("Gluten Free Penne (/400g)", "Dry", "Kitchen", [2,2,2,2,2,4,2]),
+    ("Granola", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Focaccia Bread", "Dry", "Kitchen", [1,1,2,2,2,4,1]),
+    ("Kinder Bueno", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
+    ("GlutenFree Bread", "Dry", "Kitchen", [2,2,2,2,3,2,2]),
+    ("Flour", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Dry Funghi", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Nutella", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Biscoff Biscuits", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Ham", "Meat", "Kitchen", [1,2,1,2,2,3,1]),
+    ("Sausages (/kg)", "Meat", "Kitchen", [2,3,3,4,5,6,2]),
+    ("Black Pudding (box)", "Meat", "Kitchen", [1,1,1,1,2,2,1]),
+    ("Pepperoni (/pack)", "Meat", "Kitchen", [4,5,3,4,6,8,4]),
+    ("Parma Ham (/tray 500g)", "Meat", "Kitchen", [2,2,2,2,2,3,1]),
+    ("Nduja", "Meat", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Goujons", "Meat", "Kitchen", [2,2,2,2,2,3,2]),
+    ("Pancetta", "Meat", "Kitchen", [6,7,5,6,8,10,4]),
+    ("Diced Chicken Bags", "Meat", "Kitchen", [1,3,1,2,3,6,1]),
+    ("Breakfast Bacon", "Meat", "Kitchen", [1,1,1,1,1,2,1]),
+    ("Pineapple (1 can)", "Fruit", "Kitchen", [2,2,2,2,2,2,2]),
+    ("Banana (pcs)", "Fruit", "Kitchen", [10,10,8,10,12,20,8]),
+    ("Blueberry", "Fruit", "Kitchen", [4,4,4,4,6,8,3]),
+    ("Strawberry", "Fruit", "Kitchen", [6,8,4,6,10,12,4]),
+    ("Lemon (/pcs)", "Fruit", "Kitchen", [10,10,10,10,10,20,10]),
+    ("Chilli Flakes", "Herbs", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Parsley", "Herbs", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Basil", "Herbs", "Kitchen", [1,1,1,1,1,2,1]),
+    ("Crushed B. Pepper", "Herbs", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Ground B.Pepper", "Herbs", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Whole B. Pepper", "Herbs", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Chips Seasoning", "Herbs", "Kitchen", [1,1,1,1,1,1,1]),
+    ("Oregano", "Herbs", "Kitchen", [1,1,1,1,1,1,1]),
+]
+
+async def auto_seed_company(company_id: str):
+    """Auto-create sections and items for a company if empty"""
+    days_keys = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"]
+    # Create sections
+    sections_map = {}
+    for sname in LACUCINA_SECTIONS:
+        sec = await db.sections.find_one({"company_id": company_id, "name": sname}, {"_id": 0})
+        if not sec:
+            sec = {"id": str(uuid.uuid4()), "company_id": company_id, "name": sname,
+                   "description": "", "icon": "Package", "created_at": datetime.now(timezone.utc).isoformat()}
+            await db.sections.insert_one(sec)
+        sections_map[sname] = sec["id"]
+    # Create items
+    created = 0
+    skipped = 0
+    for (name, section_name, team, pars) in LACUCINA_ITEMS:
+        sec_id = sections_map.get(section_name)
+        if not sec_id:
+            continue
+        existing = await db.items.find_one(
+            {"company_id": company_id, "name": {"$regex": f"^{name}$", "$options": "i"}}, {"_id": 0}
+        )
+        if existing:
+            skipped += 1
+            continue
+        avg_par = round(sum(pars) / 7, 1)
+        par_by_day = {days_keys[i]: pars[i] for i in range(7)}
+        item_doc = {
+            "id": str(uuid.uuid4()),
+            "company_id": company_id,
+            "name": name,
+            "section_id": sec_id,
+            "unit_of_measure": "un",
+            "minimum_stock": avg_par,
+            "minimum_stock_by_day": par_by_day,
+            "average_consumption": avg_par,
+            "item_type": "all",
+            "visible_in_units": [],
+            "show_in_reports": True,
+            "price": 0.0,
+            "team": team,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.items.insert_one(item_doc)
+        created += 1
+    return {"created": created, "skipped": skipped, "sections": len(sections_map)}
+
 @api_router.get("/items", response_model=List[ItemResponse])
 async def get_items(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
-    items = await db.items.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(2000)
-    sections = {s["id"]: s["name"] for s in await db.sections.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(100)}
+    company_id = user["company_id"]
+    # Auto-seed sections and items if company has none
+    count = await db.items.count_documents({"company_id": company_id})
+    if count == 0:
+        await auto_seed_company(company_id)
+    items = await db.items.find({"company_id": company_id}, {"_id": 0}).to_list(2000)
+    sections = {s["id"]: s["name"] for s in await db.sections.find({"company_id": company_id}, {"_id": 0}).to_list(100)}
     result = []
     for item in items:
         # Filter by unit visibility if unit_id provided
@@ -750,11 +1004,12 @@ async def get_items(unit_id: Optional[str] = None, user: dict = Depends(get_curr
                 continue
         
         item["section_name"] = sections.get(item.get("section_id", ""), "")
-        # Ensure new fields have defaults
         item.setdefault("minimum_stock_by_day", None)
         item.setdefault("item_type", "all")
         item.setdefault("visible_in_units", [])
         item.setdefault("show_in_reports", True)
+        item.setdefault("price", 0.0)
+        item.setdefault("team", "")
         result.append(ItemResponse(**item))
     return result
 
@@ -787,6 +1042,7 @@ async def create_item(item: ItemCreate, user: dict = Depends(get_current_user)):
         "visible_in_units": item.visible_in_units,
         "show_in_reports": item.show_in_reports,
         "price": item.price or 0.0,
+        "team": item.team or "",
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.items.insert_one(item_doc)
@@ -818,7 +1074,8 @@ async def update_item(item_id: str, item: ItemCreate, user: dict = Depends(get_c
             "item_type": item.item_type,
             "visible_in_units": item.visible_in_units,
             "show_in_reports": item.show_in_reports,
-            "price": item.price or 0.0
+            "price": item.price or 0.0,
+            "team": item.team or ""
         }}
     )
     if result.matched_count == 0:
@@ -831,6 +1088,7 @@ async def update_item(item_id: str, item: ItemCreate, user: dict = Depends(get_c
     updated.setdefault("visible_in_units", [])
     updated.setdefault("show_in_reports", True)
     updated.setdefault("price", 0.0)
+    updated.setdefault("team", "")
     return ItemResponse(**updated)
 
 @api_router.delete("/items/{item_id}")
@@ -1627,8 +1885,10 @@ async def seed_data(user: dict = Depends(get_current_user)):
 
 @api_router.post("/seed-items")
 async def seed_items_from_spreadsheet(user: dict = Depends(get_current_user)):
-    """Seed all items from La Cucina spreadsheet with PAR by day of week - admin only"""
+    """Internal: auto-seed sections and items for a company - admin only"""
     require_admin(user)
+    result = await auto_seed_company(user["company_id"])
+    return result
     company_id = user["company_id"]
 
     # Get or create sections
@@ -2034,34 +2294,6 @@ async def get_prep_history(user: dict = Depends(get_current_user), days: int = 7
                 "total_completed": total
             })
     return history
-
-@api_router.post("/seed-sections")
-async def seed_sections(user: dict = Depends(get_current_user)):
-    """Create all standard sections if they don't exist - admin only"""
-    require_admin(user)
-    company_id = user["company_id"]
-    section_names = [
-        "Stock Items", "Other Supplies", "Pizza", "Dry", "Sauces & Ready Food",
-        "Vegetables", "Frozen", "Meat", "Dairy", "Drinks", "Packaging", "Fruit", "Melts"
-    ]
-    created = []
-    skipped = []
-    for sname in section_names:
-        sec = await db.sections.find_one({"company_id": company_id, "name": sname}, {"_id": 0})
-        if not sec:
-            sec = {
-                "id": str(uuid.uuid4()),
-                "company_id": company_id,
-                "name": sname,
-                "description": "",
-                "icon": "Package",
-                "created_at": datetime.now(timezone.utc).isoformat()
-            }
-            await db.sections.insert_one(sec)
-            created.append(sname)
-        else:
-            skipped.append(sname)
-    return {"message": f"{len(created)} sections created, {len(skipped)} already existed", "created": created, "skipped": skipped}
 
 # ==================== ROOT ====================
 

@@ -81,8 +81,10 @@ const DailyEntryPage = () => {
     }
   };
 
+  const [teamFilter, setTeamFilter] = useState('All');
+  const filteredItems = teamFilter === 'All' ? items : items.filter(i => i.team === teamFilter);
   // Group items by section
-  const groupedItems = items.reduce((acc, item) => {
+  const groupedItems = filteredItems.reduce((acc, item) => {
     const sectionName = item.section_name || 'Other';
     if (!acc[sectionName]) acc[sectionName] = [];
     acc[sectionName].push(item);
@@ -115,6 +117,14 @@ const DailyEntryPage = () => {
             Daily Stock Entry
           </h1>
           <p className="text-slate-500 mt-1">{today}</p>
+          <div className="flex gap-2 mt-3">
+            {['All', 'Front', 'Kitchen'].map(t => (
+              <button key={t} onClick={() => setTeamFilter(t)}
+                className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors ${teamFilter === t ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
+                {t === 'All' ? '🏠 All Teams' : t === 'Front' ? '☕ Front' : '🍳 Kitchen'}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="flex items-center gap-4">
           {lastSaved && (
@@ -183,7 +193,17 @@ const DailyEntryPage = () => {
           {Object.entries(groupedItems).map(([sectionName, sectionItems]) => (
             <Card key={sectionName} data-testid={`entry-section-${sectionName}`}>
               <CardHeader>
-                <CardTitle className="font-heading text-lg">{sectionName}</CardTitle>
+                <CardTitle className="font-heading text-lg flex items-center gap-2">
+                  {sectionName}
+                  {(() => {
+                    const teams = [...new Set(groupedItems[sectionName].map(i => i.team).filter(Boolean))];
+                    return teams.map(t => (
+                      <span key={t} className={`text-xs font-medium px-2 py-0.5 rounded-full ${t === 'Front' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
+                        {t === 'Front' ? '☕ Front' : '🍳 Kitchen'}
+                      </span>
+                    ));
+                  })()}
+                </CardTitle>
                 <CardDescription>{sectionItems.length} items</CardDescription>
               </CardHeader>
               <CardContent>
