@@ -2035,6 +2035,34 @@ async def get_prep_history(user: dict = Depends(get_current_user), days: int = 7
             })
     return history
 
+@api_router.post("/seed-sections")
+async def seed_sections(user: dict = Depends(get_current_user)):
+    """Create all standard sections if they don't exist - admin only"""
+    require_admin(user)
+    company_id = user["company_id"]
+    section_names = [
+        "Stock Items", "Other Supplies", "Pizza", "Dry", "Sauces & Ready Food",
+        "Vegetables", "Frozen", "Meat", "Dairy", "Drinks", "Packaging", "Fruit", "Melts"
+    ]
+    created = []
+    skipped = []
+    for sname in section_names:
+        sec = await db.sections.find_one({"company_id": company_id, "name": sname}, {"_id": 0})
+        if not sec:
+            sec = {
+                "id": str(uuid.uuid4()),
+                "company_id": company_id,
+                "name": sname,
+                "description": "",
+                "icon": "Package",
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.sections.insert_one(sec)
+            created.append(sname)
+        else:
+            skipped.append(sname)
+    return {"message": f"{len(created)} sections created, {len(skipped)} already existed", "created": created, "skipped": skipped}
+
 # ==================== ROOT ====================
 
 @api_router.get("/")

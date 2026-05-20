@@ -256,7 +256,18 @@ const ItemsPage = () => {
           </p>
         </div>
         {isAdmin && (
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={async () => {
+              try {
+                const res = await axios.post(`${API}/seed-sections`);
+                toast.success(res.data.message);
+                fetchData();
+              } catch (err) {
+                toast.error(err.response?.data?.detail || 'Failed to create sections');
+              }
+            }}>
+              Create Sections
+            </Button>
             <Button variant="outline" onClick={async () => {
               if (!window.confirm('Import all items from La Cucina spreadsheet? Items that already exist will be skipped.')) return;
               try {
