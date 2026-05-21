@@ -30,7 +30,7 @@ const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {
     { path: '/daily-prep', label: 'Daily Prep', icon: CheckSquare },
     { path: '/daily-waste', label: 'Daily Waste', icon: AlertTriangle },
     { path: '/orders', label: 'Orders', icon: ShoppingCart },
-    { path: '/reports', label: 'Reports', icon: BarChart3 },
+    { path: '/reports', label: 'Reports', icon: BarChart3, adminOnly: true },
     { path: '/settings', label: 'Settings', icon: Settings },
   ];
 
