@@ -989,10 +989,10 @@ async def auto_seed_company(company_id: str):
 @api_router.get("/items", response_model=List[ItemResponse])
 async def get_items(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
     company_id = user["company_id"]
-    # Auto-seed sections and items if company has none
-    count = await db.items.count_documents({"company_id": company_id})
-    if count == 0:
-        await auto_seed_company(company_id)
+    # Auto-seed disabled — each company manages its own items
+    # count = await db.items.count_documents({"company_id": company_id})
+    # if count == 0:
+    #     await auto_seed_company(company_id)
     items = await db.items.find({"company_id": company_id}, {"_id": 0}).to_list(2000)
     sections = {s["id"]: s["name"] for s in await db.sections.find({"company_id": company_id}, {"_id": 0}).to_list(100)}
     result = []
