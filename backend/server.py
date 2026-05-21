@@ -79,6 +79,7 @@ class AdminUserCreate(BaseModel):
     password: str
     name: str
     role: str = "user"  # admin, user
+    unit_ids: List[str] = []  # units this user can access (empty = all units)
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -92,6 +93,7 @@ class UserResponse(BaseModel):
     company_name: Optional[str] = ""
     role: str
     created_at: str
+    unit_ids: List[str] = []
 
 class PasswordChange(BaseModel):
     current_password: str
@@ -101,6 +103,7 @@ class UserUpdate(BaseModel):
     name: Optional[str] = None
     role: Optional[str] = None
     company_id: Optional[str] = None
+    unit_ids: Optional[List[str]] = None
 
 # Unit
 class UnitCreate(BaseModel):
@@ -599,6 +602,8 @@ async def get_users(user: dict = Depends(get_current_user)):
     require_admin(user)
     users = await db.users.find({"company_id": user["company_id"]}, {"_id": 0, "password": 0}).to_list(100)
     company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
+    for u in users:
+        u.setdefault("unit_ids", [])
     return [UserResponse(**{**u, "company_name": company["name"] if company else ""}) for u in users]
 
 @api_router.post("/users", response_model=UserResponse)
@@ -616,6 +621,7 @@ async def create_user(new_user: AdminUserCreate, user: dict = Depends(get_curren
         "name": new_user.name,
         "company_id": user["company_id"],  # Same company as admin
         "role": new_user.role,
+        "unit_ids": new_user.unit_ids,  # [] = access to all units
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.users.insert_one(user_doc)
@@ -654,7 +660,13 @@ async def delete_user(user_id: str, user: dict = Depends(get_current_user)):
 
 @api_router.get("/units", response_model=List[UnitResponse])
 async def get_units(user: dict = Depends(get_current_user)):
-    units = await db.units.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(100)
+    all_units = await db.units.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(100)
+    # Admin sees all units; regular users see only their assigned units (empty list = all)
+    user_unit_ids = user.get("unit_ids", [])
+    if user.get("role") == "admin" or not user_unit_ids:
+        units = all_units
+    else:
+        units = [u for u in all_units if u["id"] in user_unit_ids]
     return [UnitResponse(**u) for u in units]
 
 @api_router.post("/units", response_model=UnitResponse)
@@ -1646,10 +1658,6 @@ async def get_stock_status_report(unit_id: str, user: dict = Depends(get_current
             elif ratio < 1:
                 status = "low"
         
-        price = item.get("price", 0.0) or 0.0
-        stock_value = round(current * price, 2)
-        to_min_value = round(max(0, minimum - current) * price, 2)
-
         result.append({
             "item_id": item["id"],
             "item_name": item["name"],
@@ -1659,10 +1667,7 @@ async def get_stock_status_report(unit_id: str, user: dict = Depends(get_current
             "minimum_stock": minimum,
             "average_consumption": item.get("average_consumption", 0),
             "status": status,
-            "last_entry_date": entry["date"],
-            "price": price,
-            "stock_value": stock_value,
-            "to_min_value": to_min_value
+            "last_entry_date": entry["date"]
         })
     
     result.sort(key=lambda x: (0 if x["status"] == "critical" else 1 if x["status"] == "low" else 2, x["section_name"]))
@@ -1723,11 +1728,6 @@ async def get_consumption_report(unit_id: str, days: int = 30, user: dict = Depe
         
         avg_daily = total_consumption / days_count if days_count > 0 else 0
         
-        price = item_data.get("price", 0.0) or 0.0
-        daily_cost = round(avg_daily * price, 2)
-        monthly_cost = round(daily_cost * 30, 2)
-        total_cost = round(total_consumption * price, 2)
-
         result.append({
             "item_id": item_id,
             "item_name": item_data["name"],
@@ -1735,11 +1735,7 @@ async def get_consumption_report(unit_id: str, days: int = 30, user: dict = Depe
             "unit_of_measure": item_data["unit_of_measure"],
             "total_consumption": round(total_consumption, 2),
             "average_daily": round(avg_daily, 2),
-            "entries_count": len(entries),
-            "price": price,
-            "daily_cost": daily_cost,
-            "monthly_cost": monthly_cost,
-            "total_cost": total_cost
+            "entries_count": len(entries)
         })
     
     result.sort(key=lambda x: x["total_consumption"], reverse=True)
