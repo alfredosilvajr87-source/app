@@ -15,7 +15,6 @@ const Layout = () => {
         mobileOpen={mobileOpen}
         setMobileOpen={setMobileOpen}
       />
-      
       <main className="main-content">
         <Header onMenuClick={() => setMobileOpen(true)} />
         <div className="page-content">

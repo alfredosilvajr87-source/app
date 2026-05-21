@@ -1,31 +1,23 @@
 import { useAuth } from '../../context/AuthContext';
 import { useUnit } from '../../context/UnitContext';
-import { Button } from '../ui/button';
 import { useEffect, useState } from 'react';
+import axios from 'axios';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
+import { Button } from '../ui/button';
 import {
-  Menu,
-  Building2,
-  ChevronDown,
-  User,
-  LogOut,
-  ChefHat,
-  Shield,
-  Sun,
-  Moon
+  Building2, ChevronDown, LogOut, ChefHat, Shield,
+  Sun, Moon, User, AlertTriangle, Package, ShoppingCart,
 } from 'lucide-react';
+import { API_URL as API } from '../../config';
 
 const Header = ({ onMenuClick }) => {
   const { user, company, logout, isAdmin } = useAuth();
   const { units, currentUnit, selectUnit } = useUnit();
   const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') === 'dark');
+  const [kpis, setKpis] = useState({ total: 0, critical: 0, pending_orders: 0 });
 
   useEffect(() => {
     if (isDark) {
@@ -37,61 +29,101 @@ const Header = ({ onMenuClick }) => {
     }
   }, [isDark]);
 
-  return (
-    <header className="app-header" data-testid="app-header">
-      {/* Mobile menu button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="lg:hidden"
-        onClick={onMenuClick}
-        data-testid="mobile-menu-btn"
-      >
-        <Menu className="h-5 w-5" />
-      </Button>
+  useEffect(() => {
+    if (currentUnit) fetchKpis();
+  }, [currentUnit]); // eslint-disable-line
 
-      {/* Company Name & Logo */}
-      <div className="flex items-center gap-4">
-        <div className="hidden sm:flex items-center gap-2">
+  const fetchKpis = async () => {
+    try {
+      const [stockRes, ordersRes] = await Promise.all([
+        axios.get(`${API}/reports/stock-status/${currentUnit.id}`),
+        axios.get(`${API}/orders/${currentUnit.id}?status=pending`),
+      ]);
+      const critical = stockRes.data.filter(i => i.status === 'critical').length;
+      setKpis({ total: stockRes.data.length, critical, pending_orders: ordersRes.data.length });
+    } catch { /* silent */ }
+  };
+
+  const initials = company?.name
+    ? company.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    : 'KP';
+
+  return (
+    <header className="dark-header">
+      {/* Left: logo + company */}
+      <div className="dark-header-left">
+        <button className="mobile-menu-btn lg:hidden" onClick={onMenuClick}>
+          <span style={{ fontSize: 20 }}>☰</span>
+        </button>
+        <div className="dark-header-logo-wrap">
           {company?.logo_url ? (
-            <img 
-              src={company.logo_url.startsWith('/api') ? `https://app-dupa.onrender.com${company.logo_url}` : company.logo_url} 
-              alt={company?.name} 
-              className="h-8 w-8 object-contain rounded"
+            <img src={company.logo_url.startsWith('/api')
+              ? `https://app-dupa.onrender.com${company.logo_url}`
+              : company.logo_url}
+              alt={company?.name}
+              className="dark-header-logo-img"
             />
           ) : (
-            <div className="p-1.5 bg-slate-900 rounded">
-              <ChefHat className="h-5 w-5 text-white" />
+            <div className="dark-header-logo-icon">
+              <ChefHat className="h-4 w-4 text-white" />
             </div>
           )}
-          <span className="font-heading font-bold text-slate-900">{company?.name || 'Company'}</span>
+          <div className="dark-header-company-info">
+            <span className="dark-header-company-name">{company?.name || 'Kitchen Pro'}</span>
+            {isAdmin && (
+              <span className="dark-header-admin-badge">
+                <Shield className="h-2.5 w-2.5" /> Admin
+              </span>
+            )}
+          </div>
         </div>
+      </div>
 
-        {/* Unit Selector */}
+      {/* Center: KPI chips */}
+      {currentUnit && (
+        <div className="dark-header-kpis">
+          <div className="dark-kpi-chip">
+            <Package className="h-3 w-3 text-slate-400" />
+            <span className="dark-kpi-val">{kpis.total}</span>
+            <span className="dark-kpi-lbl">items</span>
+          </div>
+          {kpis.critical > 0 && (
+            <div className="dark-kpi-chip dark-kpi-chip--danger">
+              <AlertTriangle className="h-3 w-3" />
+              <span className="dark-kpi-val">{kpis.critical}</span>
+              <span className="dark-kpi-lbl">critical</span>
+            </div>
+          )}
+          {kpis.pending_orders > 0 && (
+            <div className="dark-kpi-chip dark-kpi-chip--info">
+              <ShoppingCart className="h-3 w-3" />
+              <span className="dark-kpi-val">{kpis.pending_orders}</span>
+              <span className="dark-kpi-lbl">orders</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Right: unit selector + theme + user */}
+      <div className="dark-header-right">
+        {/* Unit selector */}
         {units.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                className="gap-2 bg-slate-50 border-slate-200 hover:bg-slate-100"
-                data-testid="unit-selector"
-              >
-                <Building2 className="h-4 w-4 text-slate-500" />
-                <span className="font-medium">{currentUnit?.name || 'Select Unit'}</span>
-                {currentUnit?.initials && (
-                  <span className="text-xs text-slate-400">({currentUnit.initials})</span>
-                )}
-                <ChevronDown className="h-4 w-4 text-slate-400" />
-              </Button>
+              <button className="dark-unit-btn">
+                <Building2 className="h-3.5 w-3.5" />
+                <span>{currentUnit?.name || 'Select'}</span>
+                {currentUnit?.initials && <span className="dark-unit-initials">{currentUnit.initials}</span>}
+                <ChevronDown className="h-3 w-3 opacity-60" />
+              </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuLabel>Switch Unit</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {units.map((unit) => (
+              {units.map(unit => (
                 <DropdownMenuItem
                   key={unit.id}
                   onClick={() => selectUnit(unit)}
-                  data-testid={`unit-option-${unit.id}`}
                   className={currentUnit?.id === unit.id ? 'bg-slate-100' : ''}
                 >
                   <Building2 className="h-4 w-4 mr-2 text-slate-500" />
@@ -102,57 +134,30 @@ const Header = ({ onMenuClick }) => {
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-      </div>
 
-      {/* User Menu */}
-      <div className="flex items-center gap-2">
-        {/* Dark Mode Toggle */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setIsDark(v => !v)}
-          title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-        >
+        {/* Dark mode toggle */}
+        <button className="dark-icon-btn" onClick={() => setIsDark(v => !v)} title="Toggle theme">
           {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </Button>
+        </button>
+
+        {/* User menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              className="gap-2"
-              data-testid="user-menu"
-            >
-              <div className="h-8 w-8 rounded-full bg-slate-900 flex items-center justify-center">
-                <User className="h-4 w-4 text-white" />
-              </div>
-              <div className="hidden sm:flex flex-col items-start">
-                <span className="font-medium text-sm">{user?.name}</span>
-                {isAdmin && (
-                  <span className="text-xs text-blue-600 flex items-center gap-1">
-                    <Shield className="h-3 w-3" />
-                    Admin
-                  </span>
-                )}
-              </div>
-              <ChevronDown className="h-4 w-4 text-slate-400" />
-            </Button>
+            <button className="dark-user-btn">
+              <div className="dark-avatar">{initials}</div>
+              <span className="dark-user-name hidden sm:block">{user?.name}</span>
+              <ChevronDown className="h-3 w-3 opacity-60" />
+            </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>
               <div className="flex flex-col">
                 <span className="font-medium">{user?.name}</span>
                 <span className="text-xs text-slate-500">{user?.email}</span>
-                {isAdmin && (
-                  <span className="text-xs text-blue-600 mt-1">Administrator</span>
-                )}
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={logout}
-              data-testid="logout-btn"
-              className="text-red-600 focus:text-red-600"
-            >
+            <DropdownMenuItem onClick={logout} className="text-red-600 focus:text-red-600">
               <LogOut className="h-4 w-4 mr-2" />
               Sign Out
             </DropdownMenuItem>
