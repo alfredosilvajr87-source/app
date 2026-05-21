@@ -158,6 +158,51 @@ code {
     }
 }
 
+/* ===== DARK MODE GLOBAL OVERRIDES ===== */
+/* Faz todas as classes slate funcionarem no dark mode automaticamente */
+.dark .text-slate-900 { color: hsl(210 40% 96%) !important; }
+.dark .text-slate-800 { color: hsl(210 40% 90%) !important; }
+.dark .text-slate-700 { color: hsl(210 30% 80%) !important; }
+.dark .text-slate-600 { color: hsl(210 25% 70%) !important; }
+.dark .text-slate-500 { color: hsl(215 20% 60%) !important; }
+.dark .text-slate-400 { color: hsl(215 20% 55%) !important; }
+.dark .text-slate-300 { color: hsl(215 20% 50%) !important; }
+
+.dark .bg-white { background-color: hsl(222 47% 13%) !important; }
+.dark .bg-slate-50 { background-color: hsl(222 47% 12%) !important; }
+.dark .bg-slate-100 { background-color: hsl(217 33% 18%) !important; }
+.dark .bg-slate-200 { background-color: hsl(217 33% 22%) !important; }
+
+.dark .border-slate-200 { border-color: hsl(217 33% 20%) !important; }
+.dark .border-slate-100 { border-color: hsl(217 33% 17%) !important; }
+
+.dark .hover\:bg-slate-50:hover { background-color: hsl(222 47% 15%) !important; }
+.dark .hover\:bg-slate-100:hover { background-color: hsl(217 33% 20%) !important; }
+
+/* Cards no dark mode */
+.dark [class*="card"] {
+    background-color: hsl(222 47% 13%);
+    border-color: hsl(217 33% 20%);
+    color: hsl(210 40% 96%);
+}
+
+/* Inputs no dark mode */
+.dark input, .dark textarea, .dark select {
+    background-color: hsl(217 33% 17%) !important;
+    border-color: hsl(217 33% 25%) !important;
+    color: hsl(210 40% 96%) !important;
+}
+
+/* Blue/Orange team badges ficam intactos no dark */
+.dark .bg-blue-50 { background-color: hsl(213 94% 12%) !important; }
+.dark .bg-orange-50 { background-color: hsl(24 95% 12%) !important; }
+.dark .border-blue-200 { border-color: hsl(213 70% 25%) !important; }
+.dark .border-orange-200 { border-color: hsl(24 70% 25%) !important; }
+
+/* Scrollbar dark */
+.dark ::-webkit-scrollbar-track { background: hsl(222 47% 11%); }
+.dark ::-webkit-scrollbar-thumb { background: hsl(217 33% 25%); }
+
 /* Hide Emergent badge on mobile to avoid navigation issues */
 [data-testid="emergent-badge"],
 .emergent-badge,

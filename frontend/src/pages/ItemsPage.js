@@ -256,21 +256,10 @@ const ItemsPage = () => {
           </p>
         </div>
         {isAdmin && (
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={async () => {
-              try {
-                const res = await axios.post(`${API}/fix-items-team`);
-                toast.success(res.data.message);
-                fetchData();
-              } catch { toast.error('Failed to fix teams'); }
-            }}>
-              Fix Teams
-            </Button>
-            <Button onClick={openNewDialog} data-testid="new-item-btn" disabled={sections.length === 0}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Item
-            </Button>
-          </div>
+          <Button onClick={openNewDialog} data-testid="new-item-btn" disabled={sections.length === 0}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Item
+          </Button>
         )}
       </div>
 
