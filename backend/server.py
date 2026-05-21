@@ -2317,6 +2317,86 @@ async def fix_items_team(user: dict = Depends(get_current_user)):
         updated += result.modified_count
     return {"message": f"Updated team for {updated} items"}
 
+# ==================== DAILY WASTE ====================
+
+class WasteReasonCreate(BaseModel):
+    name: str  # e.g. "Old", "Overgrown", "Mistake", "Overdate"
+
+class WasteEntryCreate(BaseModel):
+    item_id: str
+    item_name: str
+    quantity: float
+    unit_of_measure: str = "un"
+    reason_id: str
+    reason_name: str
+    notes: str = ""
+    initials: str = ""
+
+@api_router.get("/waste/reasons")
+async def get_waste_reasons(user: dict = Depends(get_current_user)):
+    reasons = await db.waste_reasons.find({"company_id": user["company_id"]}, {"_id": 0}).sort("name", 1).to_list(100)
+    if not reasons:
+        # Seed default reasons
+        defaults = ["Old", "Overgrown", "Mistake", "Overdate", "Broken", "Contaminated", "Other"]
+        docs = [{"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": n,
+                 "created_at": datetime.now(timezone.utc).isoformat()} for n in defaults]
+        await db.waste_reasons.insert_many(docs)
+        reasons = [{k: v for k, v in d.items() if k != "_id"} for d in docs]
+    return reasons
+
+@api_router.post("/waste/reasons")
+async def create_waste_reason(reason: WasteReasonCreate, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    doc = {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": reason.name,
+           "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.waste_reasons.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.delete("/waste/reasons/{reason_id}")
+async def delete_waste_reason(reason_id: str, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    await db.waste_reasons.delete_one({"id": reason_id, "company_id": user["company_id"]})
+    return {"message": "Deleted"}
+
+@api_router.post("/waste/entries")
+async def create_waste_entry(entry: WasteEntryCreate, user: dict = Depends(get_current_user)):
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "company_id": user["company_id"],
+        "date": today,
+        "item_id": entry.item_id,
+        "item_name": entry.item_name,
+        "quantity": entry.quantity,
+        "unit_of_measure": entry.unit_of_measure,
+        "reason_id": entry.reason_id,
+        "reason_name": entry.reason_name,
+        "notes": entry.notes,
+        "initials": entry.initials,
+        "recorded_by": user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.waste_entries.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.get("/waste/entries")
+async def get_waste_entries(user: dict = Depends(get_current_user), days: int = 30):
+    from datetime import timedelta
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+    entries = await db.waste_entries.find(
+        {"company_id": user["company_id"], "date": {"$gte": since}},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+    return entries
+
+@api_router.delete("/waste/entries/{entry_id}")
+async def delete_waste_entry(entry_id: str, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    await db.waste_entries.delete_one({"id": entry_id, "company_id": user["company_id"]})
+    return {"message": "Deleted"}
+
 # ==================== ROOT ====================
 
 @api_router.get("/")

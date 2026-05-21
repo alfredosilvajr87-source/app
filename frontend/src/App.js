@@ -14,6 +14,7 @@ import ReportsPage from "./pages/ReportsPage";
 import SettingsPage from "./pages/SettingsPage";
 import UsersPage from "./pages/UsersPage";
 import DailyPrepPage from "./pages/DailyPrepPage";
+import DailyWastePage from "./pages/DailyWastePage";
 import MasterPage from "./pages/MasterPage";
 
 const ProtectedRoute = ({ children }) => {
@@ -82,6 +83,7 @@ const AppRoutes = () => {
         <Route path="items" element={<ItemsPage />} />
         <Route path="daily-entry" element={<DailyEntryPage />} />
         <Route path="daily-prep" element={<DailyPrepPage />} />
+        <Route path="daily-waste" element={<DailyWastePage />} />
         <Route path="orders" element={<OrdersPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="users" element={<UsersPage />} />
