@@ -52,7 +52,10 @@ const OrdersPage = () => {
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [targetDate, setTargetDate] = useState(new Date());
+  // Default to tomorrow — orders are prepared for the next day
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const [targetDate, setTargetDate] = useState(tomorrow);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);

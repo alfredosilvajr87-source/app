@@ -79,7 +79,6 @@ class AdminUserCreate(BaseModel):
     password: str
     name: str
     role: str = "user"  # admin, user
-    unit_ids: List[str] = []  # units this user can access (empty = all units)
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -93,7 +92,6 @@ class UserResponse(BaseModel):
     company_name: Optional[str] = ""
     role: str
     created_at: str
-    unit_ids: List[str] = []
 
 class PasswordChange(BaseModel):
     current_password: str
@@ -103,7 +101,6 @@ class UserUpdate(BaseModel):
     name: Optional[str] = None
     role: Optional[str] = None
     company_id: Optional[str] = None
-    unit_ids: Optional[List[str]] = None
 
 # Unit
 class UnitCreate(BaseModel):
@@ -602,8 +599,6 @@ async def get_users(user: dict = Depends(get_current_user)):
     require_admin(user)
     users = await db.users.find({"company_id": user["company_id"]}, {"_id": 0, "password": 0}).to_list(100)
     company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
-    for u in users:
-        u.setdefault("unit_ids", [])
     return [UserResponse(**{**u, "company_name": company["name"] if company else ""}) for u in users]
 
 @api_router.post("/users", response_model=UserResponse)
@@ -621,7 +616,6 @@ async def create_user(new_user: AdminUserCreate, user: dict = Depends(get_curren
         "name": new_user.name,
         "company_id": user["company_id"],  # Same company as admin
         "role": new_user.role,
-        "unit_ids": new_user.unit_ids,  # [] = access to all units
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.users.insert_one(user_doc)
@@ -660,13 +654,7 @@ async def delete_user(user_id: str, user: dict = Depends(get_current_user)):
 
 @api_router.get("/units", response_model=List[UnitResponse])
 async def get_units(user: dict = Depends(get_current_user)):
-    all_units = await db.units.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(100)
-    # Admin sees all units; regular users see only their assigned units (empty list = all)
-    user_unit_ids = user.get("unit_ids", [])
-    if user.get("role") == "admin" or not user_unit_ids:
-        units = all_units
-    else:
-        units = [u for u in all_units if u["id"] in user_unit_ids]
+    units = await db.units.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(100)
     return [UnitResponse(**u) for u in units]
 
 @api_router.post("/units", response_model=UnitResponse)
@@ -1498,91 +1486,145 @@ async def generate_order_pdf(order_id: str, user: dict = Depends(get_current_use
     order = await db.orders.find_one({"id": order_id, "company_id": user["company_id"]}, {"_id": 0})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
-    
-    unit = await db.units.find_one({"id": order["unit_id"]}, {"_id": 0})
+
+    unit    = await db.units.find_one({"id": order["unit_id"]}, {"_id": 0})
     company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
     creator = await db.users.find_one({"id": order.get("created_by", "")}, {"_id": 0, "password": 0})
-    
-    unit_name = unit["name"] if unit else "Unknown"
+
+    unit_name    = unit["name"]    if unit    else "Unknown"
     company_name = company["name"] if company else "Company"
     creator_name = creator["name"] if creator else "Unknown"
-    
+
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    doc    = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
     styles = getSampleStyleSheet()
-    
-    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=20, spaceAfter=10, textColor=colors.HexColor('#0f172a'))
-    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=12, spaceAfter=5, textColor=colors.HexColor('#64748b'))
-    
+
+    title_style    = ParagraphStyle('Title',    parent=styles['Heading1'], fontSize=18, spaceAfter=6,  textColor=colors.HexColor('#0f172a'))
+    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'],   fontSize=10, spaceAfter=3,  textColor=colors.HexColor('#64748b'))
+    team_style_front   = ParagraphStyle('TeamFront',   parent=styles['Heading2'], fontSize=13, spaceBefore=14, spaceAfter=6,  textColor=colors.white)
+    team_style_kitchen = ParagraphStyle('TeamKitchen', parent=styles['Heading2'], fontSize=13, spaceBefore=14, spaceAfter=6,  textColor=colors.white)
+    section_style  = ParagraphStyle('Section',  parent=styles['Heading3'], fontSize=10, spaceBefore=8,  spaceAfter=4,  textColor=colors.HexColor('#334155'))
+
     elements = []
-    
-    # Header
-    elements.append(Paragraph(company_name.upper(), title_style))
-    elements.append(Paragraph(f"Purchase Order - {unit_name}", styles['Heading2']))
-    elements.append(Spacer(1, 10))
-    
-    # Order info
     created_at = datetime.fromisoformat(order['created_at'].replace('Z', '+00:00'))
-    elements.append(Paragraph(f"Order Number: {order['order_number']}", subtitle_style))
-    elements.append(Paragraph(f"Target Date: {order['target_date']}", subtitle_style))
-    elements.append(Paragraph(f"Created: {created_at.strftime('%Y-%m-%d %H:%M:%S')} UTC", subtitle_style))
-    elements.append(Paragraph(f"Created by: {creator_name}", subtitle_style))
-    elements.append(Spacer(1, 20))
-    
-    # Group items by section
-    sections_dict = {}
-    for item in order["items"]:
-        section = item.get("section_name", "Other")
-        if section not in sections_dict:
-            sections_dict[section] = []
-        sections_dict[section].append(item)
-    
-    # Create table for each section
-    for section_name, items in sections_dict.items():
-        elements.append(Paragraph(section_name, styles['Heading3']))
-        elements.append(Spacer(1, 5))
-        
-        table_data = [["Item", "Quantity", "Unit"]]
-        for item in items:
-            table_data.append([
-                item["item_name"],
-                str(int(item["adjusted_quantity"])),  # No decimals
-                item["unit_of_measure"]
-            ])
-        
-        table = Table(table_data, colWidths=[4*inch, 1.5*inch, 1*inch])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0f172a')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('ALIGN', (1, 0), (1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f8fafc')),
-            ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e2e8f0')),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-            ('TOPPADDING', (0, 1), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+
+    # ── Global header ──────────────────────────────────────────────
+    elements.append(Paragraph(company_name.upper(), title_style))
+    elements.append(Paragraph(f"Purchase Order — {unit_name}", styles['Heading2']))
+    elements.append(Spacer(1, 6))
+    elements.append(Paragraph(f"Order: {order['order_number']}   |   Target: {order['target_date']}   |   Created by: {creator_name}   |   {created_at.strftime('%Y-%m-%d %H:%M')} UTC", subtitle_style))
+    elements.append(Spacer(1, 12))
+
+    # ── Split items by team ────────────────────────────────────────
+    # Fetch item teams from db to ensure accuracy
+    item_ids = [i["item_id"] for i in order["items"]]
+    items_db = await db.items.find({"id": {"$in": item_ids}}, {"_id": 0, "id": 1, "team": 1}).to_list(1000)
+    team_map = {i["id"]: (i.get("team") or "kitchen").lower() for i in items_db}
+
+    front_items   = [i for i in order["items"] if team_map.get(i["item_id"], "kitchen") == "front"]
+    kitchen_items = [i for i in order["items"] if team_map.get(i["item_id"], "kitchen") != "front"]
+
+    def build_team_section(items, team_label, header_color, row_color):
+        if not items:
+            return
+
+        # Coloured team banner
+        banner_table = Table([[Paragraph(f"  {team_label}", ParagraphStyle(
+            'Banner', parent=styles['Normal'], fontSize=13, textColor=colors.white, fontName='Helvetica-Bold'
+        ))]], colWidths=[6.5*inch])
+        banner_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor(header_color)),
+            ('TOPPADDING',    (0,0), (-1,-1), 8),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+            ('LEFTPADDING',   (0,0), (-1,-1), 10),
         ]))
-        elements.append(table)
-        elements.append(Spacer(1, 15))
-    
-    # Notes
+        elements.append(banner_table)
+        elements.append(Spacer(1, 6))
+
+        # Group by section
+        sections_dict = {}
+        for item in items:
+            sec = item.get("section_name", "Other")
+            sections_dict.setdefault(sec, []).append(item)
+
+        for section_name, sec_items in sections_dict.items():
+            elements.append(Paragraph(section_name, section_style))
+
+            table_data = [["Item", "Qty", "Unit"]]
+            for item in sec_items:
+                table_data.append([
+                    item["item_name"],
+                    str(int(item["adjusted_quantity"])),
+                    item["unit_of_measure"]
+                ])
+
+            tbl = Table(table_data, colWidths=[4*inch, 1.3*inch, 1.2*inch])
+            tbl.setStyle(TableStyle([
+                ('BACKGROUND',    (0,0), (-1,0), colors.HexColor('#334155')),
+                ('TEXTCOLOR',     (0,0), (-1,0), colors.white),
+                ('FONTNAME',      (0,0), (-1,0), 'Helvetica-Bold'),
+                ('FONTSIZE',      (0,0), (-1,0), 9),
+                ('ALIGN',         (1,0), (2,-1), 'CENTER'),
+                ('BACKGROUND',    (0,1), (-1,-1), colors.HexColor(row_color)),
+                ('ROWBACKGROUNDS',(0,1), (-1,-1), [colors.HexColor(row_color), colors.HexColor('#ffffff')]),
+                ('GRID',          (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
+                ('FONTSIZE',      (0,1), (-1,-1), 9),
+                ('TOPPADDING',    (0,0), (-1,-1), 5),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+            ]))
+            elements.append(tbl)
+            elements.append(Spacer(1, 8))
+
+        # Team subtotal
+        total_items = len(items)
+        subtotal = Table([[Paragraph(f"  {team_label} — {total_items} item(s) to prepare", ParagraphStyle(
+            'Sub', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor('#475569'), fontName='Helvetica-Bold'
+        ))]], colWidths=[6.5*inch])
+        subtotal.setStyle(TableStyle([
+            ('BACKGROUND',    (0,0), (-1,-1), colors.HexColor('#f1f5f9')),
+            ('TOPPADDING',    (0,0), (-1,-1), 5),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+            ('LEFTPADDING',   (0,0), (-1,-1), 10),
+            ('BOX',           (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
+        ]))
+        elements.append(subtotal)
+        elements.append(Spacer(1, 18))
+
+    # ── FRONT section (blue) ───────────────────────────────────────
+    build_team_section(front_items,   "🔵  FRONT OF HOUSE",  "#1d4ed8", "#eff6ff")
+
+    # ── KITCHEN section (orange) ───────────────────────────────────
+    build_team_section(kitchen_items, "🟠  KITCHEN",          "#c2410c", "#fff7ed")
+
+    # ── Notes ──────────────────────────────────────────────────────
     if order.get("notes"):
         elements.append(Paragraph("Notes:", styles['Heading4']))
         elements.append(Paragraph(order["notes"], styles['Normal']))
-    
+
+    # ── Footer total ───────────────────────────────────────────────
+    total = len(order["items"])
+    elements.append(Spacer(1, 10))
+    footer = Table([[Paragraph(f"  Total items in this order: {total}   |   Front: {len(front_items)}   |   Kitchen: {len(kitchen_items)}", ParagraphStyle(
+        'Footer', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor('#64748b')
+    ))]], colWidths=[6.5*inch])
+    footer.setStyle(TableStyle([
+        ('BACKGROUND',    (0,0), (-1,-1), colors.HexColor('#f8fafc')),
+        ('TOPPADDING',    (0,0), (-1,-1), 6),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+        ('LEFTPADDING',   (0,0), (-1,-1), 10),
+        ('BOX',           (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
+    ]))
+    elements.append(footer)
+
     doc.build(elements)
-    
     pdf_data = buffer.getvalue()
     buffer.close()
-    
+
     return {
         "pdf_base64": base64.b64encode(pdf_data).decode(),
         "filename": f"order_{order['order_number']}_{order['target_date']}.pdf",
-        "share_title": f"Purchase Order {order['order_number']} - {company_name}",
-        "share_text": f"Purchase Order for {unit_name} - Target: {order['target_date']} - Created: {created_at.strftime('%Y-%m-%d %H:%M')}"
+        "share_title": f"Purchase Order {order['order_number']} — {company_name}",
+        "share_text": f"Order for {unit_name} — Target: {order['target_date']} — Front: {len(front_items)} items | Kitchen: {len(kitchen_items)} items"
     }
 
 # ==================== REPORTS ====================
