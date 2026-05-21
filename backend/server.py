@@ -1646,6 +1646,10 @@ async def get_stock_status_report(unit_id: str, user: dict = Depends(get_current
             elif ratio < 1:
                 status = "low"
         
+        price = item.get("price", 0.0) or 0.0
+        stock_value = round(current * price, 2)
+        to_min_value = round(max(0, minimum - current) * price, 2)
+
         result.append({
             "item_id": item["id"],
             "item_name": item["name"],
@@ -1655,7 +1659,10 @@ async def get_stock_status_report(unit_id: str, user: dict = Depends(get_current
             "minimum_stock": minimum,
             "average_consumption": item.get("average_consumption", 0),
             "status": status,
-            "last_entry_date": entry["date"]
+            "last_entry_date": entry["date"],
+            "price": price,
+            "stock_value": stock_value,
+            "to_min_value": to_min_value
         })
     
     result.sort(key=lambda x: (0 if x["status"] == "critical" else 1 if x["status"] == "low" else 2, x["section_name"]))
@@ -1716,6 +1723,11 @@ async def get_consumption_report(unit_id: str, days: int = 30, user: dict = Depe
         
         avg_daily = total_consumption / days_count if days_count > 0 else 0
         
+        price = item_data.get("price", 0.0) or 0.0
+        daily_cost = round(avg_daily * price, 2)
+        monthly_cost = round(daily_cost * 30, 2)
+        total_cost = round(total_consumption * price, 2)
+
         result.append({
             "item_id": item_id,
             "item_name": item_data["name"],
@@ -1723,7 +1735,11 @@ async def get_consumption_report(unit_id: str, days: int = 30, user: dict = Depe
             "unit_of_measure": item_data["unit_of_measure"],
             "total_consumption": round(total_consumption, 2),
             "average_daily": round(avg_daily, 2),
-            "entries_count": len(entries)
+            "entries_count": len(entries),
+            "price": price,
+            "daily_cost": daily_cost,
+            "monthly_cost": monthly_cost,
+            "total_cost": total_cost
         })
     
     result.sort(key=lambda x: x["total_consumption"], reverse=True)
