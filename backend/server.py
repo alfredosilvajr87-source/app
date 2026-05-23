@@ -21,6 +21,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.units import inch
 from io import BytesIO
 import base64
+import httpx
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -33,6 +34,10 @@ db = client[os.environ['DB_NAME']]
 # JWT Config
 JWT_SECRET = os.environ.get('JWT_SECRET', 'lacucina-secret-key-2024')
 JWT_ALGORITHM = "HS256"
+
+# Resend email config
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
+RESEND_FROM = "onboarding@resend.dev"  # sandbox sender
 JWT_EXPIRATION_HOURS = 24
 
 # Master key to protect company creation and super-admin operations
@@ -579,18 +584,73 @@ async def change_password(data: PasswordChange, user: dict = Depends(get_current
     )
     return {"message": "Password changed successfully"}
 
-@api_router.post("/auth/reset-password")
-async def reset_password(email: EmailStr, new_password: str):
-    """Reset password for a user by email (simplified - no email verification)"""
-    user = await db.users.find_one({"email": email}, {"_id": 0})
+@api_router.post("/auth/forgot-password")
+async def forgot_password(email: str):
+    """User requests password reset — notifies all company admins by email"""
+    # Check if email exists in any company
+    user = await db.users.find_one({"email": email}, {"_id": 0, "password": 0})
+    # Always return success to avoid email enumeration attacks
     if not user:
-        raise HTTPException(status_code=404, detail="Email not found")
-    
-    await db.users.update_one(
-        {"email": email},
-        {"$set": {"password": hash_password(new_password)}}
-    )
-    return {"message": "Password reset successfully. You can now login with your new password."}
+        return {"message": "If this email exists, admins have been notified."}
+
+    company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
+    company_name = company["name"] if company else "Kitchen Pro"
+
+    # Find all admins of this company
+    admins = await db.users.find(
+        {"company_id": user["company_id"], "role": "admin"},
+        {"_id": 0, "email": 1, "name": 1}
+    ).to_list(10)
+
+    if not admins or not RESEND_API_KEY:
+        return {"message": "If this email exists, admins have been notified."}
+
+    # Send email to all admins
+    admin_emails = [a["email"] for a in admins]
+    user_name = user.get("name", email)
+
+    html_body = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 32px; border-radius: 12px;">
+      <div style="background: #0f172a; padding: 24px; border-radius: 8px; text-align: center; margin-bottom: 24px;">
+        <h1 style="color: #3b82f6; margin: 0; font-size: 24px;">Kitchen Pro</h1>
+        <p style="color: #94a3b8; margin: 8px 0 0 0; font-size: 14px;">{company_name}</p>
+      </div>
+      <div style="background: white; padding: 24px; border-radius: 8px; border: 1px solid #e2e8f0;">
+        <h2 style="color: #0f172a; margin-top: 0;">⚠️ Password Reset Request</h2>
+        <p style="color: #475569;">The following user has requested a password reset:</p>
+        <div style="background: #f1f5f9; padding: 16px; border-radius: 6px; margin: 16px 0; border-left: 4px solid #3b82f6;">
+          <p style="margin: 0; font-weight: bold; color: #0f172a;">{user_name}</p>
+          <p style="margin: 4px 0 0 0; color: #64748b; font-size: 14px;">{email}</p>
+        </div>
+        <p style="color: #475569;">To reset their password, go to:</p>
+        <p style="color: #475569;"><strong>Users</strong> → Find <strong>{user_name}</strong> → Edit → Set new password</p>
+        <p style="color: #475569;">Then communicate the new password to them directly.</p>
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;">
+        <p style="color: #94a3b8; font-size: 12px; margin: 0;">If you did not expect this request, you can ignore this email. No changes have been made.</p>
+      </div>
+    </div>
+    """
+
+    try:
+        async with httpx.AsyncClient() as client_http:
+            await client_http.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {RESEND_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "from": RESEND_FROM,
+                    "to": admin_emails,
+                    "subject": f"[{company_name}] Password Reset Request — {user_name}",
+                    "html": html_body
+                },
+                timeout=10.0
+            )
+    except Exception as e:
+        logging.error(f"Failed to send reset email: {e}")
+
+    return {"message": "If this email exists, admins have been notified."}
 
 # ==================== USER MANAGEMENT (Admin) ====================
 

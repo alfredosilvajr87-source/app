@@ -26,7 +26,8 @@ const LoginPage = () => {
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [registerForm, setRegisterForm] = useState({ email: '', password: '', name: '', companyName: '', masterKey: '' });
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
-  const [resetForm, setResetForm] = useState({ email: '', newPassword: '', confirmPassword: '' });
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetSent, setResetSent] = useState(false);
   const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
@@ -70,26 +71,23 @@ const LoginPage = () => {
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
-    if (resetForm.newPassword !== resetForm.confirmPassword) {
-      toast.error('Passwords do not match');
-      return;
-    }
-    if (resetForm.newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters');
-      return;
-    }
+    if (!resetEmail) return;
     setResetting(true);
     try {
-      await axios.post(`${API}/auth/reset-password?email=${encodeURIComponent(resetForm.email)}&new_password=${encodeURIComponent(resetForm.newPassword)}`);
-      toast.success('Password reset successfully! You can now login.');
-      setResetDialogOpen(false);
-      setResetForm({ email: '', newPassword: '', confirmPassword: '' });
-      setLoginForm({ ...loginForm, email: resetForm.email });
+      await axios.post(`${API}/auth/forgot-password`, { email: resetEmail });
+      setResetSent(true);
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to reset password');
+      // Always show success to avoid email enumeration
+      setResetSent(true);
     } finally {
       setResetting(false);
     }
+  };
+
+  const handleCloseReset = () => {
+    setResetDialogOpen(false);
+    setResetEmail('');
+    setResetSent(false);
   };
 
   return (
@@ -302,74 +300,67 @@ const LoginPage = () => {
             </TabsContent>
           </Tabs>
 
-          {/* Reset Password Dialog */}
-          <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+          {/* Forgot Password Dialog */}
+          <Dialog open={resetDialogOpen} onOpenChange={handleCloseReset}>
             <DialogContent data-testid="reset-password-dialog">
               <DialogHeader>
-                <DialogTitle className="font-heading">Reset Password</DialogTitle>
+                <DialogTitle className="font-heading">Forgot Password?</DialogTitle>
                 <DialogDescription>
-                  Enter your email and a new password to reset your account
+                  {resetSent
+                    ? 'Request sent. Please wait for your administrator to contact you.'
+                    : 'Enter your email and your company administrators will be notified to reset your password.'}
                 </DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleResetPassword} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="reset-email">Email</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                    <Input
-                      id="reset-email"
-                      data-testid="reset-email-input"
-                      type="email"
-                      placeholder="your@email.com"
-                      className="pl-10"
-                      value={resetForm.email}
-                      onChange={(e) => setResetForm({ ...resetForm, email: e.target.value })}
-                      required
-                    />
+
+              {resetSent ? (
+                <div className="py-4 space-y-4">
+                  <div className="flex flex-col items-center gap-3 text-center">
+                    <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
+                      <Mail className="h-7 w-7 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-900">Admins notified!</p>
+                      <p className="text-sm text-slate-500 mt-1">
+                        Your administrators have received an email with your reset request.
+                        They will set a new password and contact you directly.
+                      </p>
+                    </div>
                   </div>
+                  <DialogFooter>
+                    <Button onClick={handleCloseReset} className="w-full">Close</Button>
+                  </DialogFooter>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reset-new-password">New Password</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                    <Input
-                      id="reset-new-password"
-                      data-testid="reset-new-password-input"
-                      type="password"
-                      placeholder="New password (min 6 characters)"
-                      className="pl-10"
-                      value={resetForm.newPassword}
-                      onChange={(e) => setResetForm({ ...resetForm, newPassword: e.target.value })}
-                      required
-                      minLength={6}
-                    />
+              ) : (
+                <form onSubmit={handleResetPassword} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="reset-email">Your Email</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                      <Input
+                        id="reset-email"
+                        data-testid="reset-email-input"
+                        type="email"
+                        placeholder="your@email.com"
+                        className="pl-10"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      Must match the email registered in the system.
+                    </p>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reset-confirm-password">Confirm Password</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                    <Input
-                      id="reset-confirm-password"
-                      data-testid="reset-confirm-password-input"
-                      type="password"
-                      placeholder="Confirm new password"
-                      className="pl-10"
-                      value={resetForm.confirmPassword}
-                      onChange={(e) => setResetForm({ ...resetForm, confirmPassword: e.target.value })}
-                      required
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setResetDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={resetting} data-testid="reset-password-submit-btn">
-                    {resetting ? 'Resetting...' : 'Reset Password'}
-                  </Button>
-                </DialogFooter>
-              </form>
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={handleCloseReset}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={resetting} data-testid="reset-password-submit-btn">
+                      {resetting ? 'Sending...' : 'Notify Admins'}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              )}
             </DialogContent>
           </Dialog>
         </div>

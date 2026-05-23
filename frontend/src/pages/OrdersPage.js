@@ -52,10 +52,7 @@ const OrdersPage = () => {
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState(false);
   const [creating, setCreating] = useState(false);
-  // Default to tomorrow — orders are prepared for the next day
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const [targetDate, setTargetDate] = useState(tomorrow);
+  const [targetDate, setTargetDate] = useState(new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -146,10 +143,13 @@ const OrdersPage = () => {
   const downloadPdf = async (orderId) => {
     try {
       const res = await axios.get(`${API}/orders/${orderId}/pdf`);
-      const link = document.createElement('a');
-      link.href = `data:application/pdf;base64,${res.data.pdf_base64}`;
-      link.download = res.data.filename;
-      link.click();
+      // Open PDF in new tab instead of downloading
+      const byteChars = atob(res.data.pdf_base64);
+      const byteNums = Array.from(byteChars).map(c => c.charCodeAt(0));
+      const blob = new Blob([new Uint8Array(byteNums)], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
       toast.success('PDF downloaded');
     } catch (err) {
       toast.error('Failed to download PDF');
