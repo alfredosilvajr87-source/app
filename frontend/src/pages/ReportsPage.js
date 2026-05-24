@@ -13,7 +13,7 @@ import { format, subDays } from 'date-fns';
 import {
   BarChart3, Package, TrendingUp, ShoppingCart, CalendarIcon,
   Download, Share2, FileText, Trash2, Euro, AlertTriangle,
-  TrendingDown, CheckCircle2, XCircle, AlertCircle, FileSpreadsheet
+  TrendingDown, CheckCircle2, XCircle, AlertCircle
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -432,7 +432,7 @@ const ReportsPage = () => {
       )}
       <Button variant="outline" size="sm" onClick={() => exportToExcel(type)}
         className="border-green-300 text-green-700 hover:bg-green-50">
-        <FileSpreadsheet className="h-4 w-4 mr-1" />Excel
+        <Download className="h-4 w-4 mr-1" />Excel
       </Button>
     </div>
   );
