@@ -141,25 +141,41 @@ const DailyEntryPage = () => {
 
   const renderItems = (itemList) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-      {itemList.map((item) => (
-        <div key={item.id} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 shadow-sm" data-testid={`entry-item-${item.id}`}>
-          <div className="flex-1 min-w-0">
-            <p className="font-medium truncate text-sm">{item.name}</p>
-            <p className="text-xs text-slate-400">Min: {item.minimum_stock} {item.unit_of_measure}</p>
+      {itemList.map((item) => {
+        const team = getItemTeam(item);
+        const cardBorder = team === 'Front'
+          ? 'border-blue-200 bg-blue-50'
+          : team === 'Kitchen'
+          ? 'border-orange-200 bg-orange-50'
+          : 'border-slate-100';
+        const dotColor = team === 'Front'
+          ? 'bg-blue-400'
+          : team === 'Kitchen'
+          ? 'bg-orange-400'
+          : 'bg-slate-300';
+        return (
+          <div key={item.id} className={`flex items-center gap-3 p-3 rounded-lg border shadow-sm ${cardBorder}`} data-testid={`entry-item-${item.id}`}>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                {team && <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`} />}
+                <p className="font-medium truncate text-sm">{item.name}</p>
+              </div>
+              <p className="text-xs text-slate-400">Min: {item.minimum_stock} {item.unit_of_measure}</p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="number" step="0.01" min="0"
+                className="w-20 text-right font-mono text-sm bg-white"
+                value={entries[item.id] ?? ''}
+                onChange={(e) => handleEntryChange(item.id, e.target.value)}
+                placeholder="0"
+                data-testid={`entry-input-${item.id}`}
+              />
+              <span className="text-xs text-slate-400 w-6">{item.unit_of_measure}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <Input
-              type="number" step="0.01" min="0"
-              className="w-20 text-right font-mono text-sm"
-              value={entries[item.id] ?? ''}
-              onChange={(e) => handleEntryChange(item.id, e.target.value)}
-              placeholder="0"
-              data-testid={`entry-input-${item.id}`}
-            />
-            <span className="text-xs text-slate-400 w-6">{item.unit_of_measure}</span>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 
