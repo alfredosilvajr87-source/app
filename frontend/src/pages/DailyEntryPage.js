@@ -139,15 +139,18 @@ const DailyEntryPage = () => {
     return acc;
   }, {});
 
-  const renderItems = (itemList) => (
+  // insideTeamBlock: when true, card is already inside a colored container — use white bg
+  const renderItems = (itemList, insideTeamBlock = false) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
       {itemList.map((item) => {
         const team = getItemTeam(item);
-        const cardBorder = team === 'Front'
+        const cardBorder = insideTeamBlock
+          ? 'border-slate-200 bg-white'
+          : team === 'Front'
           ? 'border-blue-200 bg-blue-50'
           : team === 'Kitchen'
           ? 'border-orange-200 bg-orange-50'
-          : 'border-slate-100';
+          : 'border-slate-100 bg-white';
         const dotColor = team === 'Front'
           ? 'bg-blue-400'
           : team === 'Kitchen'
@@ -263,7 +266,7 @@ const DailyEntryPage = () => {
                             </span>
                             <span className="text-xs text-slate-400">{teamItems.length} items</span>
                           </div>
-                          {renderItems(teamItems)}
+                          {renderItems(teamItems, true)}
                         </div>
                       );
                     })

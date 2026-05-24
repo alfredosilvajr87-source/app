@@ -253,27 +253,26 @@ const ReportsPage = () => {
             {/* Filter pills */}
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-medium text-slate-500">Filter:</span>
-              {[
-                { key: 'all',      label: 'All',      cls: 'bg-slate-100 text-slate-700 hover:bg-slate-200' },
-                { key: 'critical', label: '🔴 Critical', cls: 'bg-red-100 text-red-700 hover:bg-red-200' },
-                { key: 'low',      label: '🟡 Low',   cls: 'bg-amber-100 text-amber-700 hover:bg-amber-200' },
-                { key: 'ok',       label: '🟢 OK',    cls: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' },
-              ].map(f => (
-                <button
-                  key={f.key}
-                  onClick={() => setStockStatusFilter(f.key)}
-                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
-                    stockStatusFilter === f.key
-                      ? 'ring-2 ring-offset-1 ring-slate-400 ' + f.cls
-                      : f.cls
-                  }`}
-                >
-                  {f.label}
-                  <span className="ml-1.5 text-xs opacity-60">
-                    ({stockStatus.filter(i => f.key === 'all' ? true : i.status === f.key).length})
-                  </span>
-                </button>
-              ))}
+              {/* All */}
+              <button onClick={() => setStockStatusFilter('all')}
+                className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200 ${stockStatusFilter === 'all' ? 'ring-2 ring-slate-400 ring-offset-1' : ''}`}>
+                All <span className="ml-1 text-xs opacity-60">({stockStatus.length})</span>
+              </button>
+              {/* Critical */}
+              <button onClick={() => setStockStatusFilter('critical')}
+                className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors bg-red-100 text-red-700 hover:bg-red-200 ${stockStatusFilter === 'critical' ? 'ring-2 ring-red-400 ring-offset-1' : ''}`}>
+                🔴 Critical <span className="ml-1 text-xs opacity-60">({stockStatus.filter(i => i.status === 'critical').length})</span>
+              </button>
+              {/* Low */}
+              <button onClick={() => setStockStatusFilter('low')}
+                className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors bg-amber-100 text-amber-700 hover:bg-amber-200 ${stockStatusFilter === 'low' ? 'ring-2 ring-amber-400 ring-offset-1' : ''}`}>
+                🟡 Low <span className="ml-1 text-xs opacity-60">({stockStatus.filter(i => i.status === 'low').length})</span>
+              </button>
+              {/* OK */}
+              <button onClick={() => setStockStatusFilter('ok')}
+                className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors bg-emerald-100 text-emerald-700 hover:bg-emerald-200 ${stockStatusFilter === 'ok' ? 'ring-2 ring-emerald-400 ring-offset-1' : ''}`}>
+                🟢 OK <span className="ml-1 text-xs opacity-60">({stockStatus.filter(i => i.status === 'ok').length})</span>
+              </button>
             </div>
             {/* Export buttons — export only filtered */}
             <div className="flex gap-2">
