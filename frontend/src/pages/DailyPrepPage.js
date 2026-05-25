@@ -44,10 +44,9 @@ export default function DailyPrepPage() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const unitParam = currentUnit ? `?unit_id=${currentUnit.id}` : '';
       const [itemsRes, checksRes] = await Promise.all([
-        axios.get(`${API}/prep/items${unitParam}`),
-        axios.get(`${API}/prep/today${unitParam}`),
+        axios.get(`${API}/prep/items${currentUnit ? '?unit_id=' + currentUnit.id : ''}`),
+        axios.get(`${API}/prep/today${currentUnit ? '?unit_id=' + currentUnit.id : ''}`),
       ]);
       setItems(itemsRes.data);
       // Transform checks array into a map: { item_id: check }
@@ -63,8 +62,7 @@ export default function DailyPrepPage() {
 
   const fetchHistory = useCallback(async () => {
     try {
-      const unitParam = currentUnit ? `&unit_id=${currentUnit.id}` : '';
-        const res = await axios.get(`${API}/prep/history?days=7${unitParam}`);
+      const res = await axios.get(`${API}/prep/history?days=7${currentUnit ? '&unit_id=' + currentUnit.id : ''}`);
       setHistory(res.data);
     } catch {
       toast.error('Failed to load history');
@@ -232,7 +230,7 @@ export default function DailyPrepPage() {
                       disabled={isUpdating}
                       className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${cfg.color} ${isUpdating ? 'opacity-50' : 'hover:opacity-80 cursor-pointer'}`}
                     >
-                      <Icon className="h-3.5 w-3.5" />
+                      {cfg?.emoji}
                       {cfg.label}
                     </button>
                     <div className="min-w-0">
@@ -274,7 +272,7 @@ export default function DailyPrepPage() {
         >
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
-              📋 History (last 7 days)
+               History (last 7 days)
             </CardTitle>
             {showHistory ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
           </div>

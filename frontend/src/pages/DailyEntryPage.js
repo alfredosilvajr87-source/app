@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
-import { ClipboardList, Save, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ClipboardList, Save } from 'lucide-react';
 import { API_URL as API } from '../config';
 
 // Fallback team map when item.team is not set in DB
@@ -139,53 +139,34 @@ const DailyEntryPage = () => {
     return acc;
   }, {});
 
-  // insideTeamBlock: when true, card is already inside a colored container — use white bg
-  const renderItems = (itemList, insideTeamBlock = false) => (
+  const renderItems = (itemList) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-      {itemList.map((item) => {
-        const team = getItemTeam(item);
-        const cardBorder = insideTeamBlock
-          ? 'border-slate-200 bg-white'
-          : team === 'Front'
-          ? 'border-blue-200 bg-blue-50'
-          : team === 'Kitchen'
-          ? 'border-orange-200 bg-orange-50'
-          : 'border-slate-100 bg-white';
-        const dotColor = team === 'Front'
-          ? 'bg-blue-400'
-          : team === 'Kitchen'
-          ? 'bg-orange-400'
-          : 'bg-slate-300';
-        return (
-          <div key={item.id} className={`flex items-center gap-3 p-3 rounded-lg border shadow-sm ${cardBorder}`} data-testid={`entry-item-${item.id}`}>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 mb-0.5">
-                {team && <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`} />}
-                <p className="font-medium truncate text-sm">{item.name}</p>
-              </div>
-              <p className="text-xs text-slate-400">Min: {item.minimum_stock} {item.unit_of_measure}</p>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Input
-                type="number" step="0.01" min="0"
-                className="w-20 text-right font-mono text-sm bg-white"
-                value={entries[item.id] ?? ''}
-                onChange={(e) => handleEntryChange(item.id, e.target.value)}
-                placeholder="0"
-                data-testid={`entry-input-${item.id}`}
-              />
-              <span className="text-xs text-slate-400 w-6">{item.unit_of_measure}</span>
-            </div>
+      {itemList.map((item) => (
+        <div key={item.id} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 shadow-sm" data-testid={`entry-item-${item.id}`}>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium truncate text-sm">{item.name}</p>
+            <p className="text-xs text-slate-400">Min: {item.minimum_stock} {item.unit_of_measure}</p>
           </div>
-        );
-      })}
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="number" step="0.01" min="0"
+              className="w-20 text-right font-mono text-sm"
+              value={entries[item.id] ?? ''}
+              onChange={(e) => handleEntryChange(item.id, e.target.value)}
+              placeholder="0"
+              data-testid={`entry-input-${item.id}`}
+            />
+            <span className="text-xs text-slate-400 w-6">{item.unit_of_measure}</span>
+          </div>
+        </div>
+      ))}
     </div>
   );
 
   if (!currentUnit) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <AlertCircle className="h-12 w-12 text-slate-300 mb-4" />
+        <span className="text-5xl">⚠</span>
         <h2 className="font-heading text-2xl font-bold mb-2">No Unit Selected</h2>
         <p className="text-slate-500">Please select a unit to enter daily stock</p>
       </div>
@@ -210,7 +191,7 @@ const DailyEntryPage = () => {
         <div className="flex items-center gap-3">
           {lastSaved && (
             <span className="text-sm text-emerald-600 flex items-center gap-1">
-              <CheckCircle2 className="h-4 w-4" />
+              <span>✓</span>
               Saved {lastSaved.toLocaleTimeString()}
             </span>
           )}
@@ -266,7 +247,7 @@ const DailyEntryPage = () => {
                             </span>
                             <span className="text-xs text-slate-400">{teamItems.length} items</span>
                           </div>
-                          {renderItems(teamItems, true)}
+                          {renderItems(teamItems)}
                         </div>
                       );
                     })
