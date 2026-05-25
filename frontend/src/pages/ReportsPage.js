@@ -12,8 +12,7 @@ import { toast } from 'sonner';
 import { format, subDays } from 'date-fns';
 import {
   BarChart3, Package, TrendingUp, ShoppingCart, CalendarIcon,
-  Download, Share2, FileText, Trash2, Euro, AlertTriangle,
-  TrendingDown, CheckCircle2, XCircle, AlertCircle
+  Download, Share2, FileText, Trash2
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -52,17 +51,17 @@ const KpiCard = ({ label, value, sub, color = 'slate', icon: Icon }) => {
 const StatusBadge = ({ status }) => {
   if (status === 'critical') return (
     <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full font-medium">
-      <XCircle className="h-3 w-3" /> Critical
+      <Download className="h-3 w-3" /> Critical
     </span>
   );
   if (status === 'low') return (
     <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full font-medium">
-      <AlertCircle className="h-3 w-3" /> Low
+      <Download className="h-3 w-3" /> Low
     </span>
   );
   return (
     <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded-full font-medium">
-      <CheckCircle2 className="h-3 w-3" /> OK
+      <Download className="h-3 w-3" /> OK
     </span>
   );
 };
@@ -77,6 +76,7 @@ const ReportsPage = () => {
   const [ordersHistory, setOrdersHistory] = useState({ orders: [], summary: {} });
   const [wasteEntries, setWasteEntries]   = useState([]);
   const [loading, setLoading]             = useState(true);
+  const [stockStatusFilter, setStockStatusFilter] = useState('all');
   const [dateRange, setDateRange]         = useState({ start: subDays(new Date(), 30), end: new Date() });
   const [startCalendarOpen, setStartCalendarOpen] = useState(false);
   const [endCalendarOpen, setEndCalendarOpen]     = useState(false);
@@ -476,11 +476,11 @@ const ReportsPage = () => {
         {/* ══ STOCK ═════════════════════════════════════════════════ */}
         <TabsContent value="stock" className="mt-6 space-y-6">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard label="Critical Items"    value={criticalItems.length} sub="below 50% of minimum"     color="red"    icon={XCircle} />
-            <KpiCard label="Low Stock Items"   value={lowItems.length}      sub="below minimum"             color="amber"  icon={AlertCircle} />
+            <KpiCard label="Critical Items"    value={criticalItems.length} sub="below 50% of minimum"     color="red"    icon={Download} />
+            <KpiCard label="Low Stock Items"   value={lowItems.length}      sub="below minimum"             color="amber"  icon={Download} />
             {isAdmin && <>
-              <KpiCard label="Total Stock Value"  value={fmt(totalStockValue)} sub="current qty × price"    color="blue"   icon={Euro} />
-              <KpiCard label="To Buy (to min)"    value={fmt(totalToMinValue)} sub="estimated purchase cost" color="green"  icon={TrendingDown} />
+              <KpiCard label="Total Stock Value"  value={fmt(totalStockValue)} sub="current qty × price"    color="blue"   icon={Download} />
+              <KpiCard label="To Buy (to min)"    value={fmt(totalToMinValue)} sub="estimated purchase cost" color="green"  icon={TrendingUp} />
             </>}
           </div>
 
@@ -512,7 +512,7 @@ const ReportsPage = () => {
 
           {criticalItems.length > 0 && (
             <Card className="border-red-200 bg-red-50">
-              <CardHeader><CardTitle className="font-heading text-base text-red-800 flex items-center gap-2"><AlertTriangle className="h-4 w-4" />Critical Stock Alerts ({criticalItems.length})</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="font-heading text-base text-red-800 flex items-center gap-2"><Download className="h-4 w-4" />Critical Stock Alerts ({criticalItems.length})</CardTitle></CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {criticalItems.map(item => (
@@ -603,7 +603,7 @@ const ReportsPage = () => {
             <KpiCard label="Items Tracked"   value={consumption.filter(i=>i.entries_count>0).length} sub="with entries last 30d" color="slate" icon={Package} />
             <KpiCard label="Top Consumer"    value={consumption[0]?.item_name?.split(' ')[0]||'—'} sub={consumption[0]?`${consumption[0].total_consumption} ${consumption[0].unit_of_measure}`:''} color="blue" icon={TrendingUp} />
             {isAdmin && <>
-              <KpiCard label="Total Cost (30d)"   value={fmt(totalConsCost)}  sub="actual consumption cost" color="orange" icon={Euro} />
+              <KpiCard label="Total Cost (30d)"   value={fmt(totalConsCost)}  sub="actual consumption cost" color="orange" icon={Download} />
               <KpiCard label="Projected Monthly"  value={fmt(totalMonthCost)} sub="based on daily avg"      color="amber"  icon={TrendingUp} />
             </>}
           </div>
@@ -704,8 +704,8 @@ const ReportsPage = () => {
         <TabsContent value="orders" className="mt-6 space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <KpiCard label="Total Orders" value={ordersHistory.summary.total||0}     color="blue"   icon={ShoppingCart} />
-            <KpiCard label="Pending"      value={ordersHistory.summary.pending||0}   color="amber"  icon={AlertCircle} />
-            <KpiCard label="Completed"    value={ordersHistory.summary.completed||0} color="green"  icon={CheckCircle2} />
+            <KpiCard label="Pending"      value={ordersHistory.summary.pending||0}   color="amber"  icon={Download} />
+            <KpiCard label="Completed"    value={ordersHistory.summary.completed||0} color="green"  icon={Download} />
           </div>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -743,9 +743,9 @@ const ReportsPage = () => {
         {/* ══ WASTE ═════════════════════════════════════════════════ */}
         <TabsContent value="waste" className="mt-6 space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <KpiCard label="Total Waste Events"   value={wasteEntries.length}                         sub="last 30 days"             color="red"    icon={AlertTriangle} />
+            <KpiCard label="Total Waste Events"   value={wasteEntries.length}                         sub="last 30 days"             color="red"    icon={Download} />
             {isAdmin && <>
-              <KpiCard label="Estimated Waste Cost" value={wasteCost!==null?fmt(wasteCost):'—'}       sub="qty × item price · 30d"   color="orange" icon={Euro} />
+              <KpiCard label="Estimated Waste Cost" value={wasteCost!==null?fmt(wasteCost):'—'}       sub="qty × item price · 30d"   color="orange" icon={Download} />
               <KpiCard label="Projected Monthly"    value={wasteCost!==null?fmt(wasteCost):'—'}       sub="based on current trend"   color="amber"  icon={TrendingUp} />
             </>}
           </div>
