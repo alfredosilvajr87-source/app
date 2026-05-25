@@ -9,22 +9,18 @@ import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
 import { toast } from 'sonner';
 import {
-  CheckCircle2,
-  XCircle,
-  Clock,
   Plus,
   Trash2,
   ChevronDown,
   ChevronUp,
   ClipboardList,
-  History,
   RefreshCw
 } from 'lucide-react';
 
 const STATUS_CONFIG = {
-  pending:    { label: 'Pending',    color: 'bg-slate-100 text-slate-600 border border-slate-200', icon: Clock },
-  done:       { label: 'Done',       color: 'bg-green-100 text-green-700 border border-green-200', icon: CheckCircle2 },
-  dont_need:  { label: "Don't Need", color: 'bg-blue-100 text-blue-700 border border-blue-200',   icon: XCircle },
+  pending:    { label: 'Pending',    color: 'bg-slate-100 text-slate-600 border border-slate-200', emoji: '⏱' },
+  done:       { label: 'Done',       color: 'bg-green-100 text-green-700 border border-green-200', emoji: '✓' },
+  dont_need:  { label: "Don't Need", color: 'bg-blue-100 text-blue-700 border border-blue-200',   emoji: '✗' },
 };
 
 const NEXT_STATUS = { pending: 'done', done: 'dont_need', dont_need: 'pending' };
@@ -176,13 +172,13 @@ export default function DailyPrepPage() {
           </div>
           <div className="flex gap-4 text-sm">
             <span className="flex items-center gap-1 text-green-700 font-medium">
-              <CheckCircle2 className="h-4 w-4" /> {done} Done
+              <span>✓</span> {done} Done
             </span>
             <span className="flex items-center gap-1 text-blue-700 font-medium">
-              <XCircle className="h-4 w-4" /> {dontNeed} Don't Need
+              <span>✗</span> {dontNeed} Don't Need
             </span>
             <span className="flex items-center gap-1 text-slate-500">
-              <Clock className="h-4 w-4" /> {pending} Pending
+              <span>⏱</span> {pending} Pending
             </span>
           </div>
         </CardContent>
@@ -278,7 +274,7 @@ export default function DailyPrepPage() {
         >
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
-              <History className="h-4 w-4" /> History (last 7 days)
+              📋 History (last 7 days)
             </CardTitle>
             {showHistory ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
           </div>
