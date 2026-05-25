@@ -79,6 +79,7 @@ class AdminUserCreate(BaseModel):
     password: str
     name: str
     role: str = "user"  # admin, user
+    unit_ids: List[str] = []
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -91,6 +92,7 @@ class UserResponse(BaseModel):
     company_id: str
     company_name: Optional[str] = ""
     role: str
+    unit_ids: List[str] = []
     created_at: str
 
 class PasswordChange(BaseModel):
@@ -101,6 +103,7 @@ class UserUpdate(BaseModel):
     name: Optional[str] = None
     role: Optional[str] = None
     company_id: Optional[str] = None
+    unit_ids: Optional[List[str]] = None
 
 # Unit
 class UnitCreate(BaseModel):
@@ -150,7 +153,6 @@ class ItemCreate(BaseModel):
     item_type: str = "all"
     visible_in_units: List[str] = []
     show_in_reports: bool = True
-    show_in_waste: bool = True   # Whether item appears in Daily Waste dropdown
     price: Optional[float] = 0.0
     team: Optional[str] = ""  # "Front", "Kitchen", or ""
 
@@ -167,7 +169,6 @@ class ItemResponse(BaseModel):
     item_type: str = "all"
     visible_in_units: List[str] = []
     show_in_reports: bool = True
-    show_in_waste: bool = True
     price: Optional[float] = 0.0
     team: Optional[str] = ""
     created_at: str
@@ -601,7 +602,11 @@ async def get_users(user: dict = Depends(get_current_user)):
     require_admin(user)
     users = await db.users.find({"company_id": user["company_id"]}, {"_id": 0, "password": 0}).to_list(100)
     company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
-    return [UserResponse(**{**u, "company_name": company["name"] if company else ""}) for u in users]
+    result = []
+    for u in users:
+        u.setdefault("unit_ids", [])
+        result.append(UserResponse(**{**u, "company_name": company["name"] if company else ""}))
+    return result
 
 @api_router.post("/users", response_model=UserResponse)
 async def create_user(new_user: AdminUserCreate, user: dict = Depends(get_current_user)):
@@ -618,6 +623,7 @@ async def create_user(new_user: AdminUserCreate, user: dict = Depends(get_curren
         "name": new_user.name,
         "company_id": user["company_id"],  # Same company as admin
         "role": new_user.role,
+        "unit_ids": new_user.unit_ids if hasattr(new_user, 'unit_ids') else [],
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.users.insert_one(user_doc)
@@ -629,7 +635,14 @@ async def create_user(new_user: AdminUserCreate, user: dict = Depends(get_curren
 async def update_user(user_id: str, update: UserUpdate, user: dict = Depends(get_current_user)):
     require_admin(user)
     
-    update_data = {k: v for k, v in update.model_dump().items() if v is not None}
+    # unit_ids can be empty list — include it even if empty
+    raw = update.model_dump()
+    update_data = {}
+    for k, v in raw.items():
+        if k == 'unit_ids':
+            update_data[k] = v if v is not None else []
+        elif v is not None:
+            update_data[k] = v
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
     
@@ -638,6 +651,7 @@ async def update_user(user_id: str, update: UserUpdate, user: dict = Depends(get
         raise HTTPException(status_code=404, detail="User not found")
     
     updated = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
+    updated.setdefault("unit_ids", [])
     company = await db.companies.find_one({"id": updated["company_id"]}, {"_id": 0})
     return UserResponse(**{**updated, "company_name": company["name"] if company else ""})
 
@@ -992,9 +1006,10 @@ async def auto_seed_company(company_id: str):
 async def get_items(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
     company_id = user["company_id"]
     # Auto-seed sections and items if company has none
-    count = await db.items.count_documents({"company_id": company_id})
-    if count == 0:
-        await auto_seed_company(company_id)
+    # Auto-seed DISABLED — new companies start empty
+    # count = await db.items.count_documents({"company_id": company_id})
+    # if count == 0:
+    #     await auto_seed_company(company_id)
     items = await db.items.find({"company_id": company_id}, {"_id": 0}).to_list(2000)
     sections = {s["id"]: s["name"] for s in await db.sections.find({"company_id": company_id}, {"_id": 0}).to_list(100)}
     result = []
@@ -1010,7 +1025,6 @@ async def get_items(unit_id: Optional[str] = None, user: dict = Depends(get_curr
         item.setdefault("item_type", "all")
         item.setdefault("visible_in_units", [])
         item.setdefault("show_in_reports", True)
-        item.setdefault("show_in_waste", True)
         item.setdefault("price", 0.0)
         item.setdefault("team", "")
         result.append(ItemResponse(**item))
@@ -1100,6 +1114,13 @@ async def delete_item(item_id: str, user: dict = Depends(get_current_user)):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Item not found")
     return {"message": "Item deleted"}
+
+@api_router.delete("/items")
+async def delete_all_items(user: dict = Depends(get_current_user)):
+    """Delete ALL items for this company — Admin only"""
+    require_admin(user)
+    result = await db.items.delete_many({"company_id": user["company_id"]})
+    return {"message": f"Deleted {result.deleted_count} items", "deleted": result.deleted_count}
 
 # ==================== SAFETY STOCK ROUTES ====================
 
@@ -1637,13 +1658,10 @@ async def get_stock_status_report(unit_id: str, user: dict = Depends(get_current
     
     result = []
     for item in items:
-        if not item.get("show_in_reports", True):
-            continue
         entry = latest_entries.get(item["id"], {"quantity": 0, "date": None})
         current = entry["quantity"]
         minimum = item.get("minimum_stock", 0)
-        price = item.get("price", 0) or 0
-
+        
         status = "ok"
         if minimum > 0:
             ratio = current / minimum
@@ -1651,10 +1669,7 @@ async def get_stock_status_report(unit_id: str, user: dict = Depends(get_current
                 status = "critical"
             elif ratio < 1:
                 status = "low"
-
-        stock_value = current * price
-        to_min_value = max(0, minimum - current) * price
-
+        
         result.append({
             "item_id": item["id"],
             "item_name": item["name"],
@@ -1664,10 +1679,7 @@ async def get_stock_status_report(unit_id: str, user: dict = Depends(get_current
             "minimum_stock": minimum,
             "average_consumption": item.get("average_consumption", 0),
             "status": status,
-            "last_entry_date": entry["date"],
-            "price": price,
-            "stock_value": round(stock_value, 2),
-            "to_min_value": round(to_min_value, 2),
+            "last_entry_date": entry["date"]
         })
     
     result.sort(key=lambda x: (0 if x["status"] == "critical" else 1 if x["status"] == "low" else 2, x["section_name"]))
@@ -1728,7 +1740,6 @@ async def get_consumption_report(unit_id: str, days: int = 30, user: dict = Depe
         
         avg_daily = total_consumption / days_count if days_count > 0 else 0
         
-        price = item_data.get("price", 0) or 0
         result.append({
             "item_id": item_id,
             "item_name": item_data["name"],
@@ -1736,10 +1747,7 @@ async def get_consumption_report(unit_id: str, days: int = 30, user: dict = Depe
             "unit_of_measure": item_data["unit_of_measure"],
             "total_consumption": round(total_consumption, 2),
             "average_daily": round(avg_daily, 2),
-            "entries_count": len(entries),
-            "price": price,
-            "total_cost": round(total_consumption * price, 2),
-            "monthly_cost": round(avg_daily * 30 * price, 2),
+            "entries_count": len(entries)
         })
     
     result.sort(key=lambda x: x["total_consumption"], reverse=True)
@@ -2405,13 +2413,6 @@ async def get_waste_entries(user: dict = Depends(get_current_user), days: int = 
         {"company_id": user["company_id"], "date": {"$gte": since}},
         {"_id": 0}
     ).sort("created_at", -1).to_list(500)
-    # Enrich with item price for cost calculation
-    items = {i["id"]: i for i in await db.items.find({"company_id": user["company_id"]}, {"_id": 0, "id": 1, "price": 1}).to_list(2000)}
-    for entry in entries:
-        item = items.get(entry.get("item_id", ""), {})
-        price = item.get("price", 0) or 0
-        entry["item_price"] = price
-        entry["estimated_cost"] = round(entry.get("quantity", 0) * price, 2)
     return entries
 
 @api_router.delete("/waste/entries/{entry_id}")
