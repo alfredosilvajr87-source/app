@@ -582,18 +582,8 @@ async def change_password(data: PasswordChange, user: dict = Depends(get_current
     )
     return {"message": "Password changed successfully"}
 
-@api_router.post("/auth/reset-password")
-async def reset_password(email: EmailStr, new_password: str):
-    """Reset password for a user by email (simplified - no email verification)"""
-    user = await db.users.find_one({"email": email}, {"_id": 0})
-    if not user:
-        raise HTTPException(status_code=404, detail="Email not found")
-    
-    await db.users.update_one(
-        {"email": email},
-        {"$set": {"password": hash_password(new_password)}}
-    )
-    return {"message": "Password reset successfully. You can now login with your new password."}
+# /auth/reset-password removed — insecure endpoint (allowed changing any password without verification)
+# Use /auth/forgot-password instead which notifies admins
 
 # ==================== USER MANAGEMENT (Admin) ====================
 
@@ -661,7 +651,8 @@ async def delete_user(user_id: str, user: dict = Depends(get_current_user)):
     if user_id == user["id"]:
         raise HTTPException(status_code=400, detail="Cannot delete yourself")
     
-    result = await db.users.delete_one({"id": user_id})
+    # Ensure admin can only delete users from their own company
+    result = await db.users.delete_one({"id": user_id, "company_id": user["company_id"]})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": "User deleted"}
@@ -671,6 +662,10 @@ async def delete_user(user_id: str, user: dict = Depends(get_current_user)):
 @api_router.get("/units", response_model=List[UnitResponse])
 async def get_units(user: dict = Depends(get_current_user)):
     units = await db.units.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(100)
+    # If user has specific unit_ids, filter to only those
+    user_unit_ids = user.get("unit_ids", [])
+    if user_unit_ids and user.get("role") != "admin":
+        units = [u for u in units if u["id"] in user_unit_ids]
     return [UnitResponse(**u) for u in units]
 
 @api_router.post("/units", response_model=UnitResponse)
@@ -2201,17 +2196,19 @@ DEFAULT_PREP_ITEMS = [
 
 class PrepItemCreate(BaseModel):
     name: str
+    unit_id: Optional[str] = ""
 
 class PrepCheckUpdate(BaseModel):
     status: str  # "pending", "done", "dont_need"
     done_by: str = ""
 
 @api_router.get("/prep/items")
-async def get_prep_items(user: dict = Depends(get_current_user)):
-    """Get all prep items for the company"""
-    items = await db.prep_items.find(
-        {"company_id": user["company_id"]}, {"_id": 0}
-    ).sort("order", 1).to_list(200)
+async def get_prep_items(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    """Get all prep items for this unit"""
+    query = {"company_id": user["company_id"]}
+    if unit_id:
+        query["unit_id"] = unit_id
+    items = await db.prep_items.find(query, {"_id": 0}).sort("order", 1).to_list(200)
     if not items:
         # Initialize with default items on first access
         default_docs = [
@@ -2238,6 +2235,7 @@ async def add_prep_item(item: PrepItemCreate, user: dict = Depends(get_current_u
     doc = {
         "id": str(uuid.uuid4()),
         "company_id": user["company_id"],
+        "unit_id": item.unit_id or "",
         "name": item.name,
         "order": count,
         "active": True,
@@ -2257,18 +2255,22 @@ async def delete_prep_item(item_id: str, user: dict = Depends(get_current_user))
     return {"message": "Item deleted"}
 
 @api_router.get("/prep/today")
-async def get_today_checklist(user: dict = Depends(get_current_user)):
-    """Get today's checklist status for the company"""
+async def get_today_checklist(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    """Get today's checklist status for the unit"""
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    checks = await db.prep_checks.find(
-        {"company_id": user["company_id"], "date": today}, {"_id": 0}
-    ).to_list(200)
+    query = {"company_id": user["company_id"], "date": today}
+    if unit_id:
+        query["unit_id"] = unit_id
+    checks = await db.prep_checks.find(query, {"_id": 0}).to_list(200)
     return checks
 
 @api_router.put("/prep/today/{item_id}")
 async def update_today_check(item_id: str, update: PrepCheckUpdate, user: dict = Depends(get_current_user)):
     """Update the status of a prep item for today"""
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    # Get item to know its unit_id
+    prep_item = await db.prep_items.find_one({"id": item_id, "company_id": user["company_id"]}, {"_id": 0})
+    item_unit_id = prep_item.get("unit_id", "") if prep_item else ""
     existing = await db.prep_checks.find_one(
         {"company_id": user["company_id"], "date": today, "item_id": item_id}
     )
@@ -2294,7 +2296,7 @@ async def update_today_check(item_id: str, update: PrepCheckUpdate, user: dict =
     return {"message": "Updated"}
 
 @api_router.get("/prep/history")
-async def get_prep_history(user: dict = Depends(get_current_user), days: int = 7):
+async def get_prep_history(unit_id: Optional[str] = None, user: dict = Depends(get_current_user), days: int = 7):
     """Get prep history for the last N days"""
     from datetime import timedelta
     dates = [
@@ -2303,9 +2305,10 @@ async def get_prep_history(user: dict = Depends(get_current_user), days: int = 7
     ]
     history = []
     for date in dates:
-        checks = await db.prep_checks.find(
-            {"company_id": user["company_id"], "date": date}, {"_id": 0}
-        ).to_list(200)
+        query = {"company_id": user["company_id"], "date": date}
+        if unit_id:
+            query["unit_id"] = unit_id
+        checks = await db.prep_checks.find(query, {"_id": 0}).to_list(200)
         if checks:
             done = sum(1 for c in checks if c["status"] == "done")
             dont_need = sum(1 for c in checks if c["status"] == "dont_need")
@@ -2354,7 +2357,8 @@ class WasteEntryCreate(BaseModel):
     reason_id: str
     reason_name: str
     notes: str = ""
-    initials: str = ""
+    initials: str
+    unit_id: Optional[str] = ""  # Which unit this waste was recorded in = ""
 
 @api_router.get("/waste/reasons")
 async def get_waste_reasons(user: dict = Depends(get_current_user)):
@@ -2389,6 +2393,7 @@ async def create_waste_entry(entry: WasteEntryCreate, user: dict = Depends(get_c
     doc = {
         "id": str(uuid.uuid4()),
         "company_id": user["company_id"],
+        "unit_id": entry.unit_id or "",
         "date": today,
         "item_id": entry.item_id,
         "item_name": entry.item_name,
@@ -2406,13 +2411,13 @@ async def create_waste_entry(entry: WasteEntryCreate, user: dict = Depends(get_c
     return doc
 
 @api_router.get("/waste/entries")
-async def get_waste_entries(user: dict = Depends(get_current_user), days: int = 30):
+async def get_waste_entries(unit_id: Optional[str] = None, user: dict = Depends(get_current_user), days: int = 30):
     from datetime import timedelta
     since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
-    entries = await db.waste_entries.find(
-        {"company_id": user["company_id"], "date": {"$gte": since}},
-        {"_id": 0}
-    ).sort("created_at", -1).to_list(500)
+    query = {"company_id": user["company_id"], "date": {"$gte": since}}
+    if unit_id:
+        query["unit_id"] = unit_id
+    entries = await db.waste_entries.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
     return entries
 
 @api_router.delete("/waste/entries/{entry_id}")

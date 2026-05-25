@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { useUnit } from '../context/UnitContext';
 import { API_URL as API } from '../config';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -35,7 +36,7 @@ export default function DailyWastePage() {
     setLoading(true);
     try {
       const [entriesRes, itemsRes, reasonsRes] = await Promise.all([
-        axios.get(`${API}/waste/entries?days=${daysFilter}`),
+        axios.get(`${API}/waste/entries?days=${daysFilter}${currentUnit ? '&unit_id=' + currentUnit.id : ''}`),
         axios.get(`${API}/items`),
         axios.get(`${API}/waste/reasons`),
       ]);
@@ -71,7 +72,7 @@ export default function DailyWastePage() {
     }
     setSaving(true);
     try {
-      await axios.post(`${API}/waste/entries`, { ...form, quantity: parseFloat(form.quantity) });
+      await axios.post(`${API}/waste/entries`, { ...form, quantity: parseFloat(form.quantity), unit_id: currentUnit?.id || '' });
       toast.success('Waste entry recorded!');
       setForm({ item_id: '', item_name: '', quantity: '', unit_of_measure: 'un', reason_id: '', reason_name: '', notes: '', initials: '' });
       setShowForm(false);
