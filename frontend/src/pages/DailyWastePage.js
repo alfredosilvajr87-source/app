@@ -16,6 +16,7 @@ import {
 
 export default function DailyWastePage() {
   const { isAdmin, user } = useAuth();
+  const { currentUnit } = useUnit();
   const [entries, setEntries] = useState([]);
   const [items, setItems] = useState([]);
   const [reasons, setReasons] = useState([]);
