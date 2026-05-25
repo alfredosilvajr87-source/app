@@ -19,6 +19,7 @@ export default function DailyWastePage() {
   const [items, setItems] = useState([]);
   const [reasons, setReasons] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [itemSearch, setItemSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showReasons, setShowReasons] = useState(false);
@@ -39,7 +40,7 @@ export default function DailyWastePage() {
         axios.get(`${API}/waste/reasons`),
       ]);
       setEntries(entriesRes.data);
-      setItems(itemsRes.data);
+      setItems((itemsRes.data || []).filter(i => i.show_in_waste !== false));
       setReasons(reasonsRes.data);
     } catch {
       toast.error('Failed to load data');
@@ -190,17 +191,35 @@ export default function DailyWastePage() {
                 {/* Item */}
                 <div className="space-y-1.5">
                   <Label>Item *</Label>
-                  <select
-                    className="w-full h-10 px-3 rounded-md border border-slate-200 text-sm bg-white dark:bg-slate-800 dark:border-slate-600"
-                    value={form.item_id}
-                    onChange={handleItemSelect}
-                    required
-                  >
-                    <option value="">Select item...</option>
-                    {items.map(i => (
-                      <option key={i.id} value={i.id}>{i.name}</option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <Input
+                      type="text"
+                      placeholder="Type to search items..."
+                      value={itemSearch}
+                      onChange={e => { setItemSearch(e.target.value); setForm(f => ({ ...f, item_id: '', item_name: '' })); }}
+                      className="w-full"
+                      required={!form.item_id}
+                    />
+                    {itemSearch && !form.item_id && (
+                      <div className="absolute z-50 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-md shadow-lg max-h-48 overflow-y-auto mt-1">
+                        {items.filter(i => i.name.toLowerCase().includes(itemSearch.toLowerCase())).slice(0, 20).map(i => (
+                          <div
+                            key={i.id}
+                            className="px-3 py-2 text-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700"
+                            onClick={() => {
+                              setForm(f => ({ ...f, item_id: i.id, item_name: i.name, unit_of_measure: i.unit_of_measure }));
+                              setItemSearch(i.name);
+                            }}
+                          >
+                            {i.name}
+                          </div>
+                        ))}
+                        {items.filter(i => i.name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 && (
+                          <div className="px-3 py-2 text-sm text-slate-400">No items found</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Reason */}

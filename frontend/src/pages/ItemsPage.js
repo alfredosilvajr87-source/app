@@ -99,6 +99,7 @@ const ItemsPage = () => {
     item_type: 'all',
     visible_in_units: [],
     show_in_reports: true,
+    show_in_waste: true,
     price: 0
   });
 
@@ -136,6 +137,8 @@ const ItemsPage = () => {
         item_type: formData.item_type,
         visible_in_units: formData.visible_in_units,
         show_in_reports: formData.show_in_reports,
+        show_in_waste: formData.show_in_waste,
+        team: formData.team || '',
         price: parseFloat(formData.price) || 0
       };
 
@@ -171,6 +174,8 @@ const ItemsPage = () => {
       item_type: item.item_type || 'all',
       visible_in_units: item.visible_in_units || [],
       show_in_reports: item.show_in_reports !== false,
+      show_in_waste: item.show_in_waste !== false,
+      team: item.team || '',
       price: item.price || 0
     });
     setDialogOpen(true);
@@ -201,7 +206,9 @@ const ItemsPage = () => {
       average_consumption: 0,
       item_type: 'all',
       visible_in_units: [],
-      show_in_reports: true
+      show_in_reports: true,
+      show_in_waste: true,
+      team: ''
     });
   };
 
@@ -613,7 +620,7 @@ const ItemsPage = () => {
                   <div className="flex gap-2">
                     {['', 'Front', 'Kitchen'].map(t => (
                       <button key={t} type="button"
-                        onClick={() => setFormData({ ...formData, team: t })}
+                        onClick={() => setFormData(prev => ({ ...prev, team: t }))}
                         className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${formData.team === t ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
                         {t === '' ? 'All' : t === 'Front' ? '☕ Front' : '🍳 Kitchen'}
                       </button>
@@ -633,6 +640,18 @@ const ItemsPage = () => {
                     checked={formData.show_in_reports}
                     onCheckedChange={(checked) => setFormData({ ...formData, show_in_reports: checked })}
                     data-testid="show-in-reports-switch"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                  <div>
+                    <Label>Show in Daily Waste</Label>
+                    <p className="text-xs text-slate-500">Show this item in the Daily Waste dropdown</p>
+                  </div>
+                  <Switch
+                    checked={formData.show_in_waste}
+                    onCheckedChange={(checked) => setFormData({ ...formData, show_in_waste: checked })}
+                    data-testid="show-in-waste-switch"
                   />
                 </div>
 

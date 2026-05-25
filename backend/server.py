@@ -21,7 +21,6 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.units import inch
 from io import BytesIO
 import base64
-import httpx
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -34,10 +33,6 @@ db = client[os.environ['DB_NAME']]
 # JWT Config
 JWT_SECRET = os.environ.get('JWT_SECRET', 'lacucina-secret-key-2024')
 JWT_ALGORITHM = "HS256"
-
-# Resend email config
-RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
-RESEND_FROM = "onboarding@resend.dev"  # sandbox sender
 JWT_EXPIRATION_HOURS = 24
 
 # Master key to protect company creation and super-admin operations
@@ -155,6 +150,7 @@ class ItemCreate(BaseModel):
     item_type: str = "all"
     visible_in_units: List[str] = []
     show_in_reports: bool = True
+    show_in_waste: bool = True   # Whether item appears in Daily Waste dropdown
     price: Optional[float] = 0.0
     team: Optional[str] = ""  # "Front", "Kitchen", or ""
 
@@ -171,6 +167,7 @@ class ItemResponse(BaseModel):
     item_type: str = "all"
     visible_in_units: List[str] = []
     show_in_reports: bool = True
+    show_in_waste: bool = True
     price: Optional[float] = 0.0
     team: Optional[str] = ""
     created_at: str
@@ -584,73 +581,18 @@ async def change_password(data: PasswordChange, user: dict = Depends(get_current
     )
     return {"message": "Password changed successfully"}
 
-@api_router.post("/auth/forgot-password")
-async def forgot_password(email: str):
-    """User requests password reset — notifies all company admins by email"""
-    # Check if email exists in any company
-    user = await db.users.find_one({"email": email}, {"_id": 0, "password": 0})
-    # Always return success to avoid email enumeration attacks
+@api_router.post("/auth/reset-password")
+async def reset_password(email: EmailStr, new_password: str):
+    """Reset password for a user by email (simplified - no email verification)"""
+    user = await db.users.find_one({"email": email}, {"_id": 0})
     if not user:
-        return {"message": "If this email exists, admins have been notified."}
-
-    company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
-    company_name = company["name"] if company else "Kitchen Pro"
-
-    # Find all admins of this company
-    admins = await db.users.find(
-        {"company_id": user["company_id"], "role": "admin"},
-        {"_id": 0, "email": 1, "name": 1}
-    ).to_list(10)
-
-    if not admins or not RESEND_API_KEY:
-        return {"message": "If this email exists, admins have been notified."}
-
-    # Send email to all admins
-    admin_emails = [a["email"] for a in admins]
-    user_name = user.get("name", email)
-
-    html_body = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 32px; border-radius: 12px;">
-      <div style="background: #0f172a; padding: 24px; border-radius: 8px; text-align: center; margin-bottom: 24px;">
-        <h1 style="color: #3b82f6; margin: 0; font-size: 24px;">Kitchen Pro</h1>
-        <p style="color: #94a3b8; margin: 8px 0 0 0; font-size: 14px;">{company_name}</p>
-      </div>
-      <div style="background: white; padding: 24px; border-radius: 8px; border: 1px solid #e2e8f0;">
-        <h2 style="color: #0f172a; margin-top: 0;">⚠️ Password Reset Request</h2>
-        <p style="color: #475569;">The following user has requested a password reset:</p>
-        <div style="background: #f1f5f9; padding: 16px; border-radius: 6px; margin: 16px 0; border-left: 4px solid #3b82f6;">
-          <p style="margin: 0; font-weight: bold; color: #0f172a;">{user_name}</p>
-          <p style="margin: 4px 0 0 0; color: #64748b; font-size: 14px;">{email}</p>
-        </div>
-        <p style="color: #475569;">To reset their password, go to:</p>
-        <p style="color: #475569;"><strong>Users</strong> → Find <strong>{user_name}</strong> → Edit → Set new password</p>
-        <p style="color: #475569;">Then communicate the new password to them directly.</p>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;">
-        <p style="color: #94a3b8; font-size: 12px; margin: 0;">If you did not expect this request, you can ignore this email. No changes have been made.</p>
-      </div>
-    </div>
-    """
-
-    try:
-        async with httpx.AsyncClient() as client_http:
-            await client_http.post(
-                "https://api.resend.com/emails",
-                headers={
-                    "Authorization": f"Bearer {RESEND_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "from": RESEND_FROM,
-                    "to": admin_emails,
-                    "subject": f"[{company_name}] Password Reset Request — {user_name}",
-                    "html": html_body
-                },
-                timeout=10.0
-            )
-    except Exception as e:
-        logging.error(f"Failed to send reset email: {e}")
-
-    return {"message": "If this email exists, admins have been notified."}
+        raise HTTPException(status_code=404, detail="Email not found")
+    
+    await db.users.update_one(
+        {"email": email},
+        {"$set": {"password": hash_password(new_password)}}
+    )
+    return {"message": "Password reset successfully. You can now login with your new password."}
 
 # ==================== USER MANAGEMENT (Admin) ====================
 
@@ -1049,10 +991,10 @@ async def auto_seed_company(company_id: str):
 @api_router.get("/items", response_model=List[ItemResponse])
 async def get_items(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
     company_id = user["company_id"]
-    # Auto-seed disabled — each company manages its own items
-    # count = await db.items.count_documents({"company_id": company_id})
-    # if count == 0:
-    #     await auto_seed_company(company_id)
+    # Auto-seed sections and items if company has none
+    count = await db.items.count_documents({"company_id": company_id})
+    if count == 0:
+        await auto_seed_company(company_id)
     items = await db.items.find({"company_id": company_id}, {"_id": 0}).to_list(2000)
     sections = {s["id"]: s["name"] for s in await db.sections.find({"company_id": company_id}, {"_id": 0}).to_list(100)}
     result = []
@@ -1068,6 +1010,7 @@ async def get_items(unit_id: Optional[str] = None, user: dict = Depends(get_curr
         item.setdefault("item_type", "all")
         item.setdefault("visible_in_units", [])
         item.setdefault("show_in_reports", True)
+        item.setdefault("show_in_waste", True)
         item.setdefault("price", 0.0)
         item.setdefault("team", "")
         result.append(ItemResponse(**item))
@@ -1209,11 +1152,9 @@ async def get_stock_entries(unit_id: str, date: Optional[str] = None, user: dict
 
 @api_router.get("/stock-entries/{unit_id}/latest", response_model=List[StockEntryResponse])
 async def get_latest_stock_entries(unit_id: str, user: dict = Depends(get_current_user)):
-    # Only return TODAY's entries — resets daily like Daily Prep
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     pipeline = [
-        {"$match": {"unit_id": unit_id, "entry_date": today}},
-        {"$sort": {"created_at": -1}},
+        {"$match": {"unit_id": unit_id}},
+        {"$sort": {"entry_date": -1, "created_at": -1}},
         {"$group": {
             "_id": "$item_id",
             "id": {"$first": "$id"},
@@ -1227,7 +1168,7 @@ async def get_latest_stock_entries(unit_id: str, user: dict = Depends(get_curren
     ]
     entries = await db.stock_entries.aggregate(pipeline).to_list(1000)
     items = {i["id"]: i["name"] for i in await db.items.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(1000)}
-
+    
     result = []
     for entry in entries:
         entry["item_name"] = items.get(entry.get("item_id", ""), "")
@@ -1696,10 +1637,13 @@ async def get_stock_status_report(unit_id: str, user: dict = Depends(get_current
     
     result = []
     for item in items:
+        if not item.get("show_in_reports", True):
+            continue
         entry = latest_entries.get(item["id"], {"quantity": 0, "date": None})
         current = entry["quantity"]
         minimum = item.get("minimum_stock", 0)
-        
+        price = item.get("price", 0) or 0
+
         status = "ok"
         if minimum > 0:
             ratio = current / minimum
@@ -1707,7 +1651,10 @@ async def get_stock_status_report(unit_id: str, user: dict = Depends(get_current
                 status = "critical"
             elif ratio < 1:
                 status = "low"
-        
+
+        stock_value = current * price
+        to_min_value = max(0, minimum - current) * price
+
         result.append({
             "item_id": item["id"],
             "item_name": item["name"],
@@ -1717,7 +1664,10 @@ async def get_stock_status_report(unit_id: str, user: dict = Depends(get_current
             "minimum_stock": minimum,
             "average_consumption": item.get("average_consumption", 0),
             "status": status,
-            "last_entry_date": entry["date"]
+            "last_entry_date": entry["date"],
+            "price": price,
+            "stock_value": round(stock_value, 2),
+            "to_min_value": round(to_min_value, 2),
         })
     
     result.sort(key=lambda x: (0 if x["status"] == "critical" else 1 if x["status"] == "low" else 2, x["section_name"]))
@@ -1778,6 +1728,7 @@ async def get_consumption_report(unit_id: str, days: int = 30, user: dict = Depe
         
         avg_daily = total_consumption / days_count if days_count > 0 else 0
         
+        price = item_data.get("price", 0) or 0
         result.append({
             "item_id": item_id,
             "item_name": item_data["name"],
@@ -1785,7 +1736,10 @@ async def get_consumption_report(unit_id: str, days: int = 30, user: dict = Depe
             "unit_of_measure": item_data["unit_of_measure"],
             "total_consumption": round(total_consumption, 2),
             "average_daily": round(avg_daily, 2),
-            "entries_count": len(entries)
+            "entries_count": len(entries),
+            "price": price,
+            "total_cost": round(total_consumption * price, 2),
+            "monthly_cost": round(avg_daily * 30 * price, 2),
         })
     
     result.sort(key=lambda x: x["total_consumption"], reverse=True)
@@ -2451,6 +2405,13 @@ async def get_waste_entries(user: dict = Depends(get_current_user), days: int = 
         {"company_id": user["company_id"], "date": {"$gte": since}},
         {"_id": 0}
     ).sort("created_at", -1).to_list(500)
+    # Enrich with item price for cost calculation
+    items = {i["id"]: i for i in await db.items.find({"company_id": user["company_id"]}, {"_id": 0, "id": 1, "price": 1}).to_list(2000)}
+    for entry in entries:
+        item = items.get(entry.get("item_id", ""), {})
+        price = item.get("price", 0) or 0
+        entry["item_price"] = price
+        entry["estimated_cost"] = round(entry.get("quantity", 0) * price, 2)
     return entries
 
 @api_router.delete("/waste/entries/{entry_id}")
