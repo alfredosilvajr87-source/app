@@ -8,8 +8,7 @@ import { Link } from 'react-router-dom';
 import {
   Package,
   ShoppingCart,
-  TrendingUp,
-  BarChart3
+  TrendingUp
 } from 'lucide-react';
 import {
   BarChart,
@@ -68,7 +67,7 @@ const Dashboard = () => {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
         <div className="p-4 bg-slate-100 rounded-full mb-6">
-          <Package className="h-12 w-12 text-slate-400" />
+          <Layers className="h-12 w-12 text-slate-400" />
         </div>
         <h2 className="font-heading text-2xl font-bold text-slate-900 mb-2">No Unit Selected</h2>
         <p className="text-slate-500 mb-6 max-w-md">
@@ -139,7 +138,7 @@ const Dashboard = () => {
             </div>
           </div>
           <div className="mt-4 flex items-center text-sm text-slate-500">
-            <Package className="h-4 w-4 mr-1" />
+            <Layers className="h-4 w-4 mr-1" />
             {stats?.sections_count || 0} sections
           </div>
         </Card>
@@ -153,11 +152,11 @@ const Dashboard = () => {
               </p>
             </div>
             <div className="p-2 bg-rose-50 rounded-lg">
-              <Package className="h-5 w-5 text-rose-600" />
+              <AlertTriangle className="h-5 w-5 text-rose-600" />
             </div>
           </div>
           <div className="mt-4 flex items-center text-sm text-amber-600">
-            <Package className="h-4 w-4 mr-1" />
+            <Clock className="h-4 w-4 mr-1" />
             {stats?.low_stock_count || 0} items low
           </div>
         </Card>
@@ -176,7 +175,7 @@ const Dashboard = () => {
           </div>
           <Link to="/orders" className="mt-4 flex items-center text-sm text-blue-600 hover:underline">
             View orders
-            <span>→</span> //className="h-4 w-4 ml-1" />
+            <ArrowRight className="h-4 w-4 ml-1" />
           </Link>
         </Card>
 
@@ -189,7 +188,7 @@ const Dashboard = () => {
               </p>
             </div>
             <div className="p-2 bg-emerald-50 rounded-lg">
-              <Package className="h-5 w-5 text-emerald-600" />
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
             </div>
           </div>
           <div className="mt-4 flex items-center text-sm text-slate-500">
@@ -262,7 +261,7 @@ const Dashboard = () => {
           <CardContent>
             {criticalItems.length === 0 && lowItems.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
-                <Package className="h-12 w-12 mx-auto mb-4 text-emerald-400" />
+                <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-emerald-400" />
                 <p className="font-medium">All items have adequate stock levels</p>
               </div>
             ) : (

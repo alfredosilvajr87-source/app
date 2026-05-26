@@ -15,7 +15,6 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronUp,
-  Calendar,
   User,
   Package,
   Settings
@@ -55,9 +54,9 @@ export default function DailyWastePage() {
     } finally {
       setLoading(false);
     }
-  }, [daysFilter, currentUnit]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [daysFilter, currentUnit]) // eslint-disable-line react-hooks/exhaustive-deps;
 
-  useEffect(() => { fetchData(); }, [fetchData, currentUnit]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchData(); }, [fetchData]); // currentUnit in fetchData deps
 
   const handleItemSelect = (e) => {
     const item = items.find(i => i.id === e.target.value);

@@ -46,8 +46,8 @@ export default function DailyPrepPage() {
     try {
       setLoading(true);
       const [itemsRes, checksRes] = await Promise.all([
-        axios.get(`${API}/prep/items${currentUnit ? '?unit_id=' + currentUnit.id : ''}`),
-        axios.get(`${API}/prep/today${currentUnit ? '?unit_id=' + currentUnit.id : ''}`),
+        axios.get(`${API}/prep/items?unit_id=${currentUnit.id}`),
+        axios.get(`${API}/prep/today?unit_id=${currentUnit.id}`),
       ]);
       setItems(itemsRes.data);
       // Transform checks array into a map: { item_id: check }
@@ -59,7 +59,7 @@ export default function DailyPrepPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentUnit]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [currentUnit]) // eslint-disable-line react-hooks/exhaustive-deps;
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -68,9 +68,9 @@ export default function DailyPrepPage() {
     } catch {
       toast.error('Failed to load history');
     }
-  }, [currentUnit]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]); // currentUnit handled in fetchData deps
+  useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { if (showHistory) fetchHistory(); }, [showHistory, fetchHistory]);
 
   const toggleStatus = async (item) => {
@@ -231,7 +231,8 @@ export default function DailyPrepPage() {
                       onClick={() => toggleStatus(item)}
                       disabled={isUpdating}
                       className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${cfg.color} ${isUpdating ? 'opacity-50' : 'hover:opacity-80 cursor-pointer'}`}
-                    >{cfg?.emoji}
+                    >
+                      {cfg?.emoji}
                       {cfg.label}
                     </button>
                     <div className="min-w-0">
