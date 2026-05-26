@@ -35,22 +35,17 @@ import {
   Plus,
   Pencil,
   Trash2,
-  Snowflake,
-  Beef,
-  Carrot,
-  ShoppingBasket,
-  Milk,
   Package
 } from 'lucide-react';
 
 import { API_URL as API } from '../config';
 
 const iconMap = {
-  Snowflake: Snowflake,
-  Beef: Beef,
-  Carrot: Carrot,
-  ShoppingBasket: ShoppingBasket,
-  Milk: Milk,
+  Snowflake: Package,
+  Beef: Package,
+  Carrot: Package,
+  ShoppingBasket: Package,
+  Milk: Package,
   Package: Package,
 };
 
@@ -167,7 +162,7 @@ const SectionsPage = () => {
       ) : sections.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">
-            <Layers className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+            <Package className="h-12 w-12 mx-auto text-slate-300 mb-4" />
             <h3 className="font-heading text-xl font-semibold text-slate-700 mb-2">
               No Sections Yet
             </h3>
@@ -282,7 +277,8 @@ const SectionsPage = () => {
                     const Icon = iconMap[option.value];
                     return (
                       <SelectItem key={option.value} value={option.value}>
-                        <div className="flex items-center gap-2">{cfg?.emoji}
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-4 w-4" />
                           {option.label}
                         </div>
                       </SelectItem>
