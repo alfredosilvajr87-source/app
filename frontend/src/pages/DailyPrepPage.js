@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { useUnit } from '../context/UnitContext';
 import { API_URL as API } from '../config';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -8,24 +9,29 @@ import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
 import { toast } from 'sonner';
 import {
+  CheckCircle2,
+  XCircle,
+  Clock,
   Plus,
   Trash2,
   ChevronDown,
   ChevronUp,
   ClipboardList,
+  History,
   RefreshCw
 } from 'lucide-react';
 
 const STATUS_CONFIG = {
-  pending:    { label: 'Pending',    color: 'bg-slate-100 text-slate-600 border border-slate-200', emoji: '⏱' },
-  done:       { label: 'Done',       color: 'bg-green-100 text-green-700 border border-green-200', emoji: '✓' },
-  dont_need:  { label: "Don't Need", color: 'bg-blue-100 text-blue-700 border border-blue-200',   emoji: '✗' },
+  pending:    { label: 'Pending',    color: 'bg-slate-100 text-slate-600 border border-slate-200', icon: Clock },
+  done:       { label: 'Done',       color: 'bg-green-100 text-green-700 border border-green-200', icon: CheckCircle2 },
+  dont_need:  { label: "Don't Need", color: 'bg-blue-100 text-blue-700 border border-blue-200',   icon: XCircle },
 };
 
 const NEXT_STATUS = { pending: 'done', done: 'dont_need', dont_need: 'pending' };
 
 export default function DailyPrepPage() {
   const { user, isAdmin } = useAuth();
+  const { currentUnit } = useUnit();
   const [items, setItems]         = useState([]);
   const [checks, setChecks]       = useState({});
   const [history, setHistory]     = useState([]);
@@ -43,8 +49,8 @@ export default function DailyPrepPage() {
     try {
       setLoading(true);
       const [itemsRes, checksRes] = await Promise.all([
-        axios.get(`${API}/prep/items`),
-        axios.get(`${API}/prep/today`),
+        axios.get(`${API}/prep/items${currentUnit ? '?unit_id=' + currentUnit.id : ''}`),
+        axios.get(`${API}/prep/today${currentUnit ? '?unit_id=' + currentUnit.id : ''}`),
       ]);
       setItems(itemsRes.data);
       // Transform checks array into a map: { item_id: check }
@@ -56,18 +62,18 @@ export default function DailyPrepPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentUnit]) // eslint-disable-line react-hooks/exhaustive-deps;
 
   const fetchHistory = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/prep/history?days=7`);
+      const res = await axios.get(`${API}/prep/history?days=7${currentUnit ? '&unit_id=' + currentUnit.id : ''}`);
       setHistory(res.data);
     } catch {
       toast.error('Failed to load history');
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]); // currentUnit handled in fetchData deps
   useEffect(() => { if (showHistory) fetchHistory(); }, [showHistory, fetchHistory]);
 
   const toggleStatus = async (item) => {
@@ -94,7 +100,7 @@ export default function DailyPrepPage() {
     e.preventDefault();
     if (!newItemName.trim()) return;
     try {
-      const res = await axios.post(`${API}/prep/items`, { name: newItemName.trim() });
+      const res = await axios.post(`${API}/prep/items`, { name: newItemName.trim(), unit_id: currentUnit?.id || '' });
       setItems(prev => [...prev, res.data]);
       setNewItemName('');
       setShowAddForm(false);
@@ -168,13 +174,13 @@ export default function DailyPrepPage() {
           </div>
           <div className="flex gap-4 text-sm">
             <span className="flex items-center gap-1 text-green-700 font-medium">
-              <span>✓</span> {done} Done
+              <CheckCircle2 className="h-4 w-4" /> {done} Done
             </span>
             <span className="flex items-center gap-1 text-blue-700 font-medium">
-              <span>✗</span> {dontNeed} Don't Need
+              <XCircle className="h-4 w-4" /> {dontNeed} Don't Need
             </span>
             <span className="flex items-center gap-1 text-slate-500">
-              <span>⏱</span> {pending} Pending
+              <Clock className="h-4 w-4" /> {pending} Pending
             </span>
           </div>
         </CardContent>
@@ -228,7 +234,7 @@ export default function DailyPrepPage() {
                       disabled={isUpdating}
                       className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${cfg.color} ${isUpdating ? 'opacity-50' : 'hover:opacity-80 cursor-pointer'}`}
                     >
-                      {cfg?.emoji}
+                      <Icon className="h-3.5 w-3.5" />
                       {cfg.label}
                     </button>
                     <div className="min-w-0">
@@ -270,7 +276,7 @@ export default function DailyPrepPage() {
         >
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
-               History (last 7 days)
+              <History className="h-4 w-4" /> History (last 7 days)
             </CardTitle>
             {showHistory ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
           </div>

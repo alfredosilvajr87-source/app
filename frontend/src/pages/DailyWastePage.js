@@ -35,10 +35,9 @@ export default function DailyWastePage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const unitParam = currentUnit ? `&unit_id=${currentUnit.id}` : '';
       const [entriesRes, itemsRes, reasonsRes] = await Promise.all([
-        axios.get(`${API}/waste/entries?days=${daysFilter}${unitParam}`),
-        axios.get(`${API}/items`),
+        axios.get(`${API}/waste/entries?days=${daysFilter}${currentUnit ? '&unit_id=' + currentUnit.id : ''}`),
+        axios.get(`${API}/items${currentUnit ? '?unit_id=' + currentUnit.id : ''}`),
         axios.get(`${API}/waste/reasons`),
       ]);
       setEntries(entriesRes.data);
@@ -51,7 +50,7 @@ export default function DailyWastePage() {
     }
   }, [daysFilter, currentUnit]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData, currentUnit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleItemSelect = (e) => {
     const item = items.find(i => i.id === e.target.value);

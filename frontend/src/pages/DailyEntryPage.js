@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
-import { ClipboardList, Save } from 'lucide-react';
+import { ClipboardList, Save, CheckCircle2, AlertCircle } from 'lucide-react';
 import { API_URL as API } from '../config';
 
 // Fallback team map when item.team is not set in DB
@@ -91,7 +91,7 @@ const DailyEntryPage = () => {
     setLoading(true);
     try {
       const [itemsRes, entriesRes] = await Promise.all([
-        axios.get(`${API}/items`),
+        axios.get(`${API}/items?unit_id=${currentUnit.id}`),
         axios.get(`${API}/stock-entries/${currentUnit.id}/latest`)
       ]);
       setItems(itemsRes.data);
@@ -166,7 +166,7 @@ const DailyEntryPage = () => {
   if (!currentUnit) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <span className="text-5xl mb-4 block">⚠</span>
+        <AlertCircle className="h-12 w-12 text-slate-300 mb-4" />
         <h2 className="font-heading text-2xl font-bold mb-2">No Unit Selected</h2>
         <p className="text-slate-500">Please select a unit to enter daily stock</p>
       </div>
@@ -191,7 +191,7 @@ const DailyEntryPage = () => {
         <div className="flex items-center gap-3">
           {lastSaved && (
             <span className="text-sm text-emerald-600 flex items-center gap-1">
-              <span>✓</span>
+              <CheckCircle2 className="h-4 w-4" />
               Saved {lastSaved.toLocaleTimeString()}
             </span>
           )}
