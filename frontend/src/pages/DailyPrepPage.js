@@ -71,7 +71,7 @@ export default function DailyPrepPage() {
     } catch {
       toast.error('Failed to load history');
     }
-  }, []);
+  }, [currentUnit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchData(); }, [fetchData]); // currentUnit handled in fetchData deps
   useEffect(() => { if (showHistory) fetchHistory(); }, [showHistory, fetchHistory]);
