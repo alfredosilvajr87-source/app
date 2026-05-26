@@ -166,7 +166,7 @@ const DailyEntryPage = () => {
   if (!currentUnit) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <span className="text-5xl">⚠</span>
+        <span className="text-5xl mb-4 block">⚠</span>
         <h2 className="font-heading text-2xl font-bold mb-2">No Unit Selected</h2>
         <p className="text-slate-500">Please select a unit to enter daily stock</p>
       </div>

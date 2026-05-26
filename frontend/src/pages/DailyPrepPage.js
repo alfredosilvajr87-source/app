@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
-import { useUnit } from '../context/UnitContext';
 import { API_URL as API } from '../config';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -27,7 +26,6 @@ const NEXT_STATUS = { pending: 'done', done: 'dont_need', dont_need: 'pending' }
 
 export default function DailyPrepPage() {
   const { user, isAdmin } = useAuth();
-  const { currentUnit } = useUnit();
   const [items, setItems]         = useState([]);
   const [checks, setChecks]       = useState({});
   const [history, setHistory]     = useState([]);
@@ -45,8 +43,8 @@ export default function DailyPrepPage() {
     try {
       setLoading(true);
       const [itemsRes, checksRes] = await Promise.all([
-        axios.get(`${API}/prep/items${currentUnit ? '?unit_id=' + currentUnit.id : ''}`),
-        axios.get(`${API}/prep/today${currentUnit ? '?unit_id=' + currentUnit.id : ''}`),
+        axios.get(`${API}/prep/items`),
+        axios.get(`${API}/prep/today`),
       ]);
       setItems(itemsRes.data);
       // Transform checks array into a map: { item_id: check }
@@ -62,14 +60,14 @@ export default function DailyPrepPage() {
 
   const fetchHistory = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/prep/history?days=7${currentUnit ? '&unit_id=' + currentUnit.id : ''}`);
+      const res = await axios.get(`${API}/prep/history?days=7`);
       setHistory(res.data);
     } catch {
       toast.error('Failed to load history');
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData, currentUnit]);
+  useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { if (showHistory) fetchHistory(); }, [showHistory, fetchHistory]);
 
   const toggleStatus = async (item) => {
@@ -96,7 +94,7 @@ export default function DailyPrepPage() {
     e.preventDefault();
     if (!newItemName.trim()) return;
     try {
-      const res = await axios.post(`${API}/prep/items`, { name: newItemName.trim(), unit_id: currentUnit?.id || '' });
+      const res = await axios.post(`${API}/prep/items`, { name: newItemName.trim() });
       setItems(prev => [...prev, res.data]);
       setNewItemName('');
       setShowAddForm(false);
