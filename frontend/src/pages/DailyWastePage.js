@@ -54,7 +54,7 @@ export default function DailyWastePage() {
     } finally {
       setLoading(false);
     }
-    }, [daysFilter, currentUnit]) // eslint-disable-line react-hooks/exhaustive-deps;
+    }, [daysFilter, currentUnit]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchData(); }, [fetchData]); // currentUnit in fetchData deps
 
