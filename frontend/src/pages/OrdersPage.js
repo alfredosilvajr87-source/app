@@ -469,7 +469,7 @@ const OrdersPage = () => {
                           onClick={() => openAmendDialog(order)}
                           data-testid={`amend-order-${order.id}`}
                         >
-                          <Edit className="h-4 w-4 mr-1" />
+                          <Pencil className="h-4 w-4 mr-1" />
                           Amend
                         </Button>
                       </div>

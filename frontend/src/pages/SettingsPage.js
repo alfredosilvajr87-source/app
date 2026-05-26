@@ -216,6 +216,20 @@ const SettingsPage = () => {
     setUnitDialogOpen(true);
   };
 
+  const handleMigration = async () => {
+    if (!window.confirm('This will assign existing data to the first unit. Run only once. Continue?')) return;
+    setMigrating(true);
+    try {
+      const res = await axios.post(`${API}/admin/migrate-unit-ids`);
+      setMigrateResult(res.data);
+      toast.success('Migration done! Records updated: ' + JSON.stringify(res.data.updated));
+    } catch (err) {
+      toast.error('Migration failed: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setMigrating(false);
+    }
+  };
+
   return (
     <div className="space-y-8" data-testid="settings-page">
       {/* Page Header */}
