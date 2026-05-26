@@ -62,7 +62,7 @@ export default function DailyPrepPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentUnit]) // eslint-disable-line react-hooks/exhaustive-deps;
+  }, [currentUnit]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchHistory = useCallback(async () => {
     try {
