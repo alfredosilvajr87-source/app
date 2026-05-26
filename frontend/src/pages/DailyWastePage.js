@@ -10,8 +10,15 @@ import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { toast } from 'sonner';
 import {
-  Trash2, Plus, RefreshCw, ChevronDown, ChevronUp,
-  AlertTriangle, Calendar, User, Package, Settings
+  Trash2,
+  Plus,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  Calendar,
+  User,
+  Package,
+  Settings
 } from 'lucide-react';
 
 export default function DailyWastePage() {

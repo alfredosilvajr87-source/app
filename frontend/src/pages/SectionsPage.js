@@ -32,7 +32,6 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
 import {
-  Layers,
   Plus,
   Pencil,
   Trash2,
@@ -283,8 +282,7 @@ const SectionsPage = () => {
                     const Icon = iconMap[option.value];
                     return (
                       <SelectItem key={option.value} value={option.value}>
-                        <div className="flex items-center gap-2">
-                          <Icon className="h-4 w-4" />
+                        <div className="flex items-center gap-2">{cfg?.emoji}
                           {option.label}
                         </div>
                       </SelectItem>

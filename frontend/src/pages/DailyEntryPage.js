@@ -5,7 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
-import { ClipboardList, Save, CheckCircle2, AlertCircle } from 'lucide-react';
+import {
+  ClipboardList,
+  Save
+} from 'lucide-react';
 import { API_URL as API } from '../config';
 
 // Fallback team map when item.team is not set in DB

@@ -35,8 +35,6 @@ import {
   CalendarIcon,
   Download,
   Share2,
-  CheckCircle2,
-  Clock,
   Trash2,
   FileText,
   Edit
@@ -143,13 +141,10 @@ const OrdersPage = () => {
   const downloadPdf = async (orderId) => {
     try {
       const res = await axios.get(`${API}/orders/${orderId}/pdf`);
-      // Open PDF in new tab instead of downloading
-      const byteChars = atob(res.data.pdf_base64);
-      const byteNums = Array.from(byteChars).map(c => c.charCodeAt(0));
-      const blob = new Blob([new Uint8Array(byteNums)], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      const link = document.createElement('a');
+      link.href = `data:application/pdf;base64,${res.data.pdf_base64}`;
+      link.download = res.data.filename;
+      link.click();
       toast.success('PDF downloaded');
     } catch (err) {
       toast.error('Failed to download PDF');

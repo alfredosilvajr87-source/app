@@ -1596,7 +1596,9 @@ async def generate_order_pdf(order_id: str, user: dict = Depends(get_current_use
 
 @api_router.get("/reports/dashboard/{unit_id}")
 async def get_dashboard_stats(unit_id: str, user: dict = Depends(get_current_user)):
-    total_items = await db.items.count_documents({"company_id": user["company_id"]})
+    # Count only items visible in this unit
+    all_items_for_count = await db.items.find({"company_id": user["company_id"]}, {"_id": 0, "visible_in_units": 1, "id": 1}).to_list(2000)
+    total_items = sum(1 for i in all_items_for_count if not i.get("visible_in_units") or unit_id in i.get("visible_in_units", []))
     
     pipeline = [
         {"$match": {"unit_id": unit_id}},
@@ -1613,6 +1615,10 @@ async def get_dashboard_stats(unit_id: str, user: dict = Depends(get_current_use
     critical_stock_count = 0
     
     for item in items:
+        # Skip items not visible in this unit
+        visible_units = item.get("visible_in_units", [])
+        if visible_units and unit_id not in visible_units:
+            continue
         current = latest_entries.get(item["id"], 0)
         minimum = item.get("minimum_stock", 0)
         if minimum > 0:
@@ -1653,6 +1659,13 @@ async def get_stock_status_report(unit_id: str, user: dict = Depends(get_current
     
     result = []
     for item in items:
+        # Skip items not visible in this unit
+        visible_units = item.get("visible_in_units", [])
+        if visible_units and unit_id not in visible_units:
+            continue
+        # Skip items excluded from reports
+        if not item.get("show_in_reports", True):
+            continue
         entry = latest_entries.get(item["id"], {"quantity": 0, "date": None})
         current = entry["quantity"]
         minimum = item.get("minimum_stock", 0)
@@ -1665,6 +1678,10 @@ async def get_stock_status_report(unit_id: str, user: dict = Depends(get_current
             elif ratio < 1:
                 status = "low"
         
+        price = item.get("price", 0) or 0
+        stock_value = round(current * price, 2)
+        to_min_value = round(max(0, minimum - current) * price, 2)
+
         result.append({
             "item_id": item["id"],
             "item_name": item["name"],
@@ -1674,7 +1691,12 @@ async def get_stock_status_report(unit_id: str, user: dict = Depends(get_current
             "minimum_stock": minimum,
             "average_consumption": item.get("average_consumption", 0),
             "status": status,
-            "last_entry_date": entry["date"]
+            "last_entry_date": entry["date"],
+            "price": price,
+            "stock_value": stock_value,
+            "to_min_value": to_min_value,
+            "team": item.get("team", ""),
+            "show_in_reports": item.get("show_in_reports", True)
         })
     
     result.sort(key=lambda x: (0 if x["status"] == "critical" else 1 if x["status"] == "low" else 2, x["section_name"]))
@@ -1735,6 +1757,11 @@ async def get_consumption_report(unit_id: str, days: int = 30, user: dict = Depe
         
         avg_daily = total_consumption / days_count if days_count > 0 else 0
         
+        # Skip items not visible in this unit
+        visible_units = item_data.get("visible_in_units", [])
+        if visible_units and unit_id not in visible_units:
+            continue
+        price = item_data.get("price", 0) or 0
         result.append({
             "item_id": item_id,
             "item_name": item_data["name"],
@@ -1742,7 +1769,10 @@ async def get_consumption_report(unit_id: str, days: int = 30, user: dict = Depe
             "unit_of_measure": item_data["unit_of_measure"],
             "total_consumption": round(total_consumption, 2),
             "average_daily": round(avg_daily, 2),
-            "entries_count": len(entries)
+            "entries_count": len(entries),
+            "price": price,
+            "total_cost": round(total_consumption * price, 2),
+            "monthly_cost": round(avg_daily * 30 * price, 2)
         })
     
     result.sort(key=lambda x: x["total_consumption"], reverse=True)
@@ -2201,14 +2231,22 @@ class PrepItemCreate(BaseModel):
 class PrepCheckUpdate(BaseModel):
     status: str  # "pending", "done", "dont_need"
     done_by: str = ""
+    unit_id: Optional[str] = ""  # unit where this check is being made
 
 @api_router.get("/prep/items")
 async def get_prep_items(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
     """Get all prep items for this unit"""
-    query = {"company_id": user["company_id"]}
     if unit_id:
-        query["unit_id"] = unit_id
-    items = await db.prep_items.find(query, {"_id": 0}).sort("order", 1).to_list(200)
+        # Return items for this unit OR items with no unit (backward compat)
+        items = await db.prep_items.find(
+            {"company_id": user["company_id"],
+             "$or": [{"unit_id": unit_id}, {"unit_id": {"$in": ["", None]}}]},
+            {"_id": 0}
+        ).sort("order", 1).to_list(200)
+    else:
+        items = await db.prep_items.find(
+            {"company_id": user["company_id"]}, {"_id": 0}
+        ).sort("order", 1).to_list(200)
     if not items:
         # Initialize with default items on first access
         default_docs = [
@@ -2260,17 +2298,26 @@ async def get_today_checklist(unit_id: Optional[str] = None, user: dict = Depend
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     query = {"company_id": user["company_id"], "date": today}
     if unit_id:
-        query["unit_id"] = unit_id
-    checks = await db.prep_checks.find(query, {"_id": 0}).to_list(200)
+        # Find checks for this unit OR checks with no unit (backward compat)
+        checks = await db.prep_checks.find(
+            {"$or": [
+                {**query, "unit_id": unit_id},
+                {**query, "unit_id": {"$in": ["", None]}}
+            ]}, {"_id": 0}
+        ).to_list(200)
+    else:
+        checks = await db.prep_checks.find(query, {"_id": 0}).to_list(200)
     return checks
 
 @api_router.put("/prep/today/{item_id}")
 async def update_today_check(item_id: str, update: PrepCheckUpdate, user: dict = Depends(get_current_user)):
     """Update the status of a prep item for today"""
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    # Get item to know its unit_id
-    prep_item = await db.prep_items.find_one({"id": item_id, "company_id": user["company_id"]}, {"_id": 0})
-    item_unit_id = prep_item.get("unit_id", "") if prep_item else ""
+    # Use unit_id from request body (most reliable), fallback to prep_item
+    item_unit_id = update.unit_id or ""
+    if not item_unit_id:
+        prep_item = await db.prep_items.find_one({"id": item_id, "company_id": user["company_id"]}, {"_id": 0})
+        item_unit_id = prep_item.get("unit_id", "") if prep_item else ""
     existing = await db.prep_checks.find_one(
         {"company_id": user["company_id"], "date": today, "item_id": item_id}
     )
@@ -2280,6 +2327,7 @@ async def update_today_check(item_id: str, update: PrepCheckUpdate, user: dict =
             {"$set": {
                 "status": update.status,
                 "done_by": update.done_by,
+                "unit_id": item_unit_id,
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }}
         )
@@ -2287,6 +2335,7 @@ async def update_today_check(item_id: str, update: PrepCheckUpdate, user: dict =
         await db.prep_checks.insert_one({
             "id": str(uuid.uuid4()),
             "company_id": user["company_id"],
+            "unit_id": item_unit_id,
             "date": today,
             "item_id": item_id,
             "status": update.status,

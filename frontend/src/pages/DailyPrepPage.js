@@ -9,22 +9,18 @@ import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
 import { toast } from 'sonner';
 import {
-  CheckCircle2,
-  XCircle,
-  Clock,
   Plus,
   Trash2,
   ChevronDown,
   ChevronUp,
   ClipboardList,
-  History,
   RefreshCw
 } from 'lucide-react';
 
 const STATUS_CONFIG = {
-  pending:    { label: 'Pending',    color: 'bg-slate-100 text-slate-600 border border-slate-200', icon: Clock },
-  done:       { label: 'Done',       color: 'bg-green-100 text-green-700 border border-green-200', icon: CheckCircle2 },
-  dont_need:  { label: "Don't Need", color: 'bg-blue-100 text-blue-700 border border-blue-200',   icon: XCircle },
+  pending:    { label: 'Pending',    color: 'bg-slate-100 text-slate-600 border border-slate-200', emoji: '⏱' },
+  done:       { label: 'Done',       color: 'bg-green-100 text-green-700 border border-green-200', emoji: '✓' },
+  dont_need:  { label: "Don't Need", color: 'bg-blue-100 text-blue-700 border border-blue-200',   emoji: '✗' },
 };
 
 const NEXT_STATUS = { pending: 'done', done: 'dont_need', dont_need: 'pending' };
@@ -46,6 +42,7 @@ export default function DailyPrepPage() {
   });
 
   const fetchData = useCallback(async () => {
+    if (!currentUnit) return;
     try {
       setLoading(true);
       const [itemsRes, checksRes] = await Promise.all([
@@ -83,7 +80,8 @@ export default function DailyPrepPage() {
     try {
       await axios.put(`${API}/prep/today/${item.id}`, {
         status: next,
-        done_by: user?.name || ''
+        done_by: user?.name || '',
+        unit_id: currentUnit?.id || ''
       });
       setChecks(prev => ({
         ...prev,
@@ -233,8 +231,7 @@ export default function DailyPrepPage() {
                       onClick={() => toggleStatus(item)}
                       disabled={isUpdating}
                       className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${cfg.color} ${isUpdating ? 'opacity-50' : 'hover:opacity-80 cursor-pointer'}`}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
+                    >{cfg?.emoji}
                       {cfg.label}
                     </button>
                     <div className="min-w-0">
