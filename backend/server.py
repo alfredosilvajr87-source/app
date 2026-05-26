@@ -2236,13 +2236,22 @@ class PrepCheckUpdate(BaseModel):
 @api_router.get("/prep/items")
 async def get_prep_items(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
     """Get all prep items for this unit"""
+    # Items with no unit_id are shared across all units of the company
+    # Items with a unit_id belong exclusively to that unit
     if unit_id:
-        # Return items for this unit OR items with no unit (backward compat)
         items = await db.prep_items.find(
             {"company_id": user["company_id"],
-             "$or": [{"unit_id": unit_id}, {"unit_id": {"$in": ["", None]}}]},
+             "$or": [{"unit_id": unit_id}, {"unit_id": {"$in": ["", None, "undefined"]}}]},
             {"_id": 0}
         ).sort("order", 1).to_list(200)
+        # Deduplicate by name to avoid duplicates from migration
+        seen_names = set()
+        deduped = []
+        for item in items:
+            if item["name"] not in seen_names:
+                seen_names.add(item["name"])
+                deduped.append(item)
+        items = deduped
     else:
         items = await db.prep_items.find(
             {"company_id": user["company_id"]}, {"_id": 0}
@@ -2298,13 +2307,19 @@ async def get_today_checklist(unit_id: Optional[str] = None, user: dict = Depend
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     query = {"company_id": user["company_id"], "date": today}
     if unit_id:
-        # Find checks for this unit OR checks with no unit (backward compat)
         checks = await db.prep_checks.find(
             {"$or": [
                 {**query, "unit_id": unit_id},
-                {**query, "unit_id": {"$in": ["", None]}}
+                {**query, "unit_id": {"$in": ["", None, "undefined"]}}
             ]}, {"_id": 0}
         ).to_list(200)
+        # Deduplicate by item_id — keep the one with unit_id if both exist
+        seen = {}
+        for c in checks:
+            iid = c["item_id"]
+            if iid not in seen or (c.get("unit_id") == unit_id):
+                seen[iid] = c
+        checks = list(seen.values())
     else:
         checks = await db.prep_checks.find(query, {"_id": 0}).to_list(200)
     return checks
@@ -2465,6 +2480,7 @@ async def get_waste_entries(unit_id: Optional[str] = None, user: dict = Depends(
     since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
     query = {"company_id": user["company_id"], "date": {"$gte": since}}
     if unit_id:
+        # Strict filter — only this unit's entries
         query["unit_id"] = unit_id
     entries = await db.waste_entries.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
     return entries
@@ -2476,6 +2492,44 @@ async def delete_waste_entry(entry_id: str, user: dict = Depends(get_current_use
     return {"message": "Deleted"}
 
 # ==================== ROOT ====================
+
+@api_router.post("/admin/migrate-unit-ids")
+async def migrate_unit_ids(user: dict = Depends(get_current_user)):
+    """One-time migration: assign unit_id to documents missing it.
+    Uses the FIRST unit of the company as default."""
+    require_admin(user)
+    company_id = user["company_id"]
+    # Get first unit
+    first_unit = await db.units.find_one({"company_id": company_id}, {"_id": 0})
+    if not first_unit:
+        return {"message": "No units found"}
+    unit_id = first_unit["id"]
+    results = {}
+    # Fix prep_items
+    r1 = await db.prep_items.update_many(
+        {"company_id": company_id, "unit_id": {"$in": ["", None]}},
+        {"$set": {"unit_id": unit_id}}
+    )
+    results["prep_items"] = r1.modified_count
+    # Fix prep_checks
+    r2 = await db.prep_checks.update_many(
+        {"company_id": company_id, "unit_id": {"$in": ["", None]}},
+        {"$set": {"unit_id": unit_id}}
+    )
+    results["prep_checks"] = r2.modified_count
+    # Fix waste_entries
+    r3 = await db.waste_entries.update_many(
+        {"company_id": company_id, "unit_id": {"$in": ["", None]}},
+        {"$set": {"unit_id": unit_id}}
+    )
+    results["waste_entries"] = r3.modified_count
+    # Fix stock_entries
+    r4 = await db.stock_entries.update_many(
+        {"unit_id": {"$in": ["", None]}, "company_id": company_id},
+        {"$set": {"unit_id": unit_id}}
+    )
+    results["stock_entries"] = r4.modified_count
+    return {"message": f"Migration done for unit {first_unit['name']}", "updated": results}
 
 @api_router.get("/")
 async def root():
