@@ -36,8 +36,7 @@ import {
   Download,
   Share2,
   Trash2,
-  FileText,
-  Edit
+  FileText
 } from 'lucide-react';
 
 import { API_URL as API } from '../config';
@@ -258,8 +257,8 @@ const OrdersPage = () => {
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'pending': return <Clock className="h-4 w-4 text-amber-600" />;
-      case 'completed': return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
+      case 'pending': return <span>⏱</span>;
+      case 'completed': return <span>✓</span>;
       default: return null;
     }
   };
@@ -349,7 +348,7 @@ const OrdersPage = () => {
           {pendingOrders.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
-                <Clock className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+                <span>⏱</span>
                 <p className="text-slate-500">No pending orders</p>
               </CardContent>
             </Card>
@@ -396,7 +395,7 @@ const OrdersPage = () => {
                           onClick={() => updateOrderStatus(order.id, 'completed')}
                           data-testid={`complete-order-${order.id}`}
                         >
-                          <CheckCircle2 className="h-4 w-4 mr-1" />
+                          <span>✓</span>
                           Complete
                         </Button>
                         <Button
@@ -423,7 +422,7 @@ const OrdersPage = () => {
           {completedOrders.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
-                <CheckCircle2 className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+                <span>✓</span>
                 <p className="text-slate-500">No completed orders</p>
               </CardContent>
             </Card>
@@ -512,7 +511,7 @@ const OrdersPage = () => {
 
               {calculatedOrder.items.length === 0 ? (
                 <div className="text-center py-8">
-                  <CheckCircle2 className="h-12 w-12 mx-auto text-emerald-400 mb-4" />
+                  <span>✓</span>
                   <p className="text-slate-500">All items have sufficient stock!</p>
                 </div>
               ) : (

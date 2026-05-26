@@ -56,7 +56,7 @@ export default function DailyWastePage() {
     }
     }, [daysFilter, currentUnit]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { fetchData(); }, [fetchData]); // currentUnit in fetchData deps
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleItemSelect = (e) => {
     const item = items.find(i => i.id === e.target.value);
@@ -135,7 +135,7 @@ export default function DailyWastePage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <AlertTriangle className="h-6 w-6 text-amber-500" />
+            <span className="text-xl">⚠</span>
             Daily Waste
           </h1>
           <p className="text-sm text-slate-500 mt-1">Track and record food waste</p>
@@ -301,7 +301,7 @@ export default function DailyWastePage() {
       ) : entries.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <AlertTriangle className="h-10 w-10 mx-auto text-slate-300 mb-3" />
+            <span className="text-xl">⚠</span>
             <p className="text-slate-500">No waste entries in the last {daysFilter} days.</p>
             <p className="text-sm text-slate-400 mt-1">Click "Record Waste" to add one.</p>
           </CardContent>
@@ -340,7 +340,7 @@ function WasteDayCard({ date, entries, total, isAdmin, onDelete }) {
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Calendar className="h-4 w-4 text-slate-400" />
+            <span>📅</span>
             <span className="font-semibold">{formatted}</span>
             <Badge variant="outline" className="text-xs">{total} items</Badge>
           </div>

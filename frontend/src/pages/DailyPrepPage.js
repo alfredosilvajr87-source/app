@@ -46,8 +46,8 @@ export default function DailyPrepPage() {
     try {
       setLoading(true);
       const [itemsRes, checksRes] = await Promise.all([
-        axios.get(`${API}/prep/items?unit_id=${currentUnit.id}`),
-        axios.get(`${API}/prep/today?unit_id=${currentUnit.id}`),
+        axios.get(`${API}/prep/items${currentUnit ? '?unit_id=' + currentUnit.id : ''}`),
+        axios.get(`${API}/prep/today${currentUnit ? '?unit_id=' + currentUnit.id : ''}`),
       ]);
       setItems(itemsRes.data);
       // Transform checks array into a map: { item_id: check }
@@ -59,7 +59,7 @@ export default function DailyPrepPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentUnit]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -68,7 +68,7 @@ export default function DailyPrepPage() {
     } catch {
       toast.error('Failed to load history');
     }
-  }, [currentUnit]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { if (showHistory) fetchHistory(); }, [showHistory, fetchHistory]);
@@ -172,13 +172,13 @@ export default function DailyPrepPage() {
           </div>
           <div className="flex gap-4 text-sm">
             <span className="flex items-center gap-1 text-green-700 font-medium">
-              <CheckCircle2 className="h-4 w-4" /> {done} Done
+              <span>✓</span> {done} Done
             </span>
             <span className="flex items-center gap-1 text-blue-700 font-medium">
-              <XCircle className="h-4 w-4" /> {dontNeed} Don't Need
+              <span>✗</span> {dontNeed} Don't Need
             </span>
             <span className="flex items-center gap-1 text-slate-500">
-              <Clock className="h-4 w-4" /> {pending} Pending
+              <span>⏱</span> {pending} Pending
             </span>
           </div>
         </CardContent>
@@ -274,7 +274,7 @@ export default function DailyPrepPage() {
         >
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
-              <History className="h-4 w-4" /> History (last 7 days)
+              📋 History (last 7 days)
             </CardTitle>
             {showHistory ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
           </div>
