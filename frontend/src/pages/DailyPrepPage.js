@@ -59,7 +59,7 @@ export default function DailyPrepPage() {
     } finally {
       setLoading(false);
     }
-    }, [currentUnit]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentUnit]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -68,7 +68,7 @@ export default function DailyPrepPage() {
     } catch {
       toast.error('Failed to load history');
     }
-  }, []);
+  }, [currentUnit]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { if (showHistory) fetchHistory(); }, [showHistory, fetchHistory]);
