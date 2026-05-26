@@ -68,6 +68,8 @@ const SettingsPage = () => {
   const [unitForm, setUnitForm] = useState({ name: '', initials: '', address: '' });
   const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' });
   const [companyForm, setCompanyForm] = useState({ name: '' });
+  const [migrating, setMigrating] = useState(false);
+  const [migrateResult, setMigrateResult] = useState(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -684,6 +686,38 @@ const SettingsPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Data Migration — Admin Only */}
+      {isAdmin && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardHeader>
+            <CardTitle className="font-heading text-lg flex items-center gap-2 text-amber-800">
+              ⚠ Data Migration
+            </CardTitle>
+            <CardDescription className="text-amber-700">
+              Run once to assign existing prep items, waste entries and stock data to the correct unit.
+              Only needed if data appears across all units.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {migrateResult && (
+              <div className="mb-3 p-3 bg-green-100 rounded-lg text-sm text-green-800">
+                ✓ Done: prep_items={migrateResult.updated?.prep_items || 0},
+                waste={migrateResult.updated?.waste_entries || 0},
+                stock={migrateResult.updated?.stock_entries || 0},
+                checks={migrateResult.updated?.prep_checks || 0}
+              </div>
+            )}
+            <Button
+              variant="outline"
+              className="border-amber-400 text-amber-800 hover:bg-amber-100"
+              onClick={handleMigration}
+              disabled={migrating}
+            >
+              {migrating ? '⏳ Migrating...' : '🔧 Run Migration'}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };
