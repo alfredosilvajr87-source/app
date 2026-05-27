@@ -36,7 +36,8 @@ import {
   Download,
   Share2,
   Trash2,
-  FileText
+  FileText,
+  Pencil
 } from 'lucide-react';
 
 import { API_URL as API } from '../config';
