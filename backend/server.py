@@ -2235,23 +2235,13 @@ class PrepCheckUpdate(BaseModel):
 
 @api_router.get("/prep/items")
 async def get_prep_items(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
-    """Get all prep items for this unit"""
-    # Items with no unit_id are shared across all units of the company
-    # Items with a unit_id belong exclusively to that unit
+    """Get prep items. Each unit has fully independent items — strictly filter by unit_id."""
     if unit_id:
+        # Strict: only items that belong to this exact unit
         items = await db.prep_items.find(
-            {"company_id": user["company_id"],
-             "$or": [{"unit_id": unit_id}, {"unit_id": {"$in": ["", None, "undefined"]}}]},
+            {"company_id": user["company_id"], "unit_id": unit_id},
             {"_id": 0}
         ).sort("order", 1).to_list(200)
-        # Deduplicate by name to avoid duplicates from migration
-        seen_names = set()
-        deduped = []
-        for item in items:
-            if item["name"] not in seen_names:
-                seen_names.add(item["name"])
-                deduped.append(item)
-        items = deduped
     else:
         items = await db.prep_items.find(
             {"company_id": user["company_id"]}, {"_id": 0}
@@ -2314,21 +2304,8 @@ async def get_today_checklist(unit_id: Optional[str] = None, user: dict = Depend
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     query = {"company_id": user["company_id"], "date": today}
     if unit_id:
-        checks = await db.prep_checks.find(
-            {"$or": [
-                {**query, "unit_id": unit_id},
-                {**query, "unit_id": {"$in": ["", None, "undefined"]}}
-            ]}, {"_id": 0}
-        ).to_list(200)
-        # Deduplicate by item_id — keep the one with unit_id if both exist
-        seen = {}
-        for c in checks:
-            iid = c["item_id"]
-            if iid not in seen or (c.get("unit_id") == unit_id):
-                seen[iid] = c
-        checks = list(seen.values())
-    else:
-        checks = await db.prep_checks.find(query, {"_id": 0}).to_list(200)
+        query["unit_id"] = unit_id
+    checks = await db.prep_checks.find(query, {"_id": 0}).to_list(200)
     return checks
 
 @api_router.put("/prep/today/{item_id}")
