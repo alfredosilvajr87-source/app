@@ -2297,12 +2297,15 @@ async def add_prep_item(item: PrepItemCreate, user: dict = Depends(get_current_u
     return doc
 
 @api_router.delete("/prep/items/{item_id}")
-async def delete_prep_item(item_id: str, user: dict = Depends(get_current_user)):
-    """Delete a prep item - admin only"""
+async def delete_prep_item(item_id: str, unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    """Delete a prep item - admin only. If unit_id provided, only deletes items belonging to that unit."""
     require_admin(user)
-    result = await db.prep_items.delete_one({"id": item_id, "company_id": user["company_id"]})
+    query = {"id": item_id, "company_id": user["company_id"]}
+    if unit_id:
+        query["unit_id"] = unit_id
+    result = await db.prep_items.delete_one(query)
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Item not found")
+        raise HTTPException(status_code=404, detail="Item not found or does not belong to this unit")
     return {"message": "Item deleted"}
 
 @api_router.get("/prep/today")

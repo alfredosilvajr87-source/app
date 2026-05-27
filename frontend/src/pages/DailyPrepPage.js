@@ -111,11 +111,17 @@ export default function DailyPrepPage() {
   const deleteItem = async (itemId) => {
     if (!window.confirm('Remove this item from the prep list?')) return;
     try {
-      await axios.delete(`${API}/prep/items/${itemId}`);
+      await axios.delete(`${API}/prep/items/${itemId}`, {
+        params: { unit_id: currentUnit?.id || '' }
+      });
       setItems(prev => prev.filter(i => i.id !== itemId));
       toast.success('Item removed');
-    } catch {
-      toast.error('Failed to remove item');
+    } catch (err) {
+      if (err.response?.status === 404) {
+        toast.error('This item belongs to another unit and cannot be deleted here');
+      } else {
+        toast.error('Failed to remove item');
+      }
     }
   };
 
