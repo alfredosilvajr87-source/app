@@ -70,6 +70,9 @@ const SettingsPage = () => {
   const [companyForm, setCompanyForm] = useState({ name: '' });
   const [migrating, setMigrating] = useState(false);
   const [migrateResult, setMigrateResult] = useState(null);
+  const [clearPrepDialogOpen, setClearPrepDialogOpen] = useState(false);
+  const [clearingUnit, setClearingUnit] = useState(null);
+  const [clearing, setClearing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -214,6 +217,21 @@ const SettingsPage = () => {
     setEditingUnit(null);
     setUnitForm({ name: '', initials: '', address: '' });
     setUnitDialogOpen(true);
+  };
+
+  const handleClearPrepItems = async () => {
+    if (!clearingUnit) return;
+    setClearing(true);
+    try {
+      const res = await axios.delete(`${API}/prep/items`, { params: { unit_id: clearingUnit.id } });
+      toast.success(`Cleared ${res.data.message}`);
+      setClearPrepDialogOpen(false);
+      setClearingUnit(null);
+    } catch (err) {
+      toast.error('Failed to clear prep items: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setClearing(false);
+    }
   };
 
   const handleMigration = async () => {
@@ -700,6 +718,59 @@ const SettingsPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Clear Prep Items — Admin Only */}
+      {isAdmin && units.length > 0 && (
+        <Card className="border-red-200 bg-red-50">
+          <CardHeader>
+            <CardTitle className="font-heading text-lg flex items-center gap-2 text-red-800">
+              <Trash2 className="h-5 w-5" />
+              Clear Prep Items
+            </CardTitle>
+            <CardDescription className="text-red-700">
+              Remove all prep items from a specific unit. This action cannot be undone.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {units.map(unit => (
+                <Button
+                  key={unit.id}
+                  variant="outline"
+                  className="border-red-400 text-red-800 hover:bg-red-100"
+                  onClick={() => { setClearingUnit(unit); setClearPrepDialogOpen(true); }}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Clear {unit.name}
+                </Button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Clear Prep Confirmation */}
+      <AlertDialog open={clearPrepDialogOpen} onOpenChange={setClearPrepDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear all prep items for {clearingUnit?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete ALL prep items for <strong>{clearingUnit?.name}</strong>.
+              This cannot be undone. You will need to add items manually afterwards.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={clearing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleClearPrepItems}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={clearing}
+            >
+              {clearing ? 'Clearing...' : 'Yes, delete all'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Data Migration — Admin Only */}
       {isAdmin && (
         <Card className="border-amber-200 bg-amber-50">
