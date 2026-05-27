@@ -2257,21 +2257,25 @@ async def get_prep_items(unit_id: Optional[str] = None, user: dict = Depends(get
             {"company_id": user["company_id"]}, {"_id": 0}
         ).sort("order", 1).to_list(200)
     if not items:
-        # Initialize with default items on first access
-        default_docs = [
-            {
-                "id": str(uuid.uuid4()),
-                "company_id": user["company_id"],
-                "name": name,
-                "order": idx,
-                "active": True,
-                "created_at": datetime.now(timezone.utc).isoformat()
-            }
-            for idx, name in enumerate(DEFAULT_PREP_ITEMS)
-        ]
-        await db.prep_items.insert_many(default_docs)
-        items = [{"_id": None, **d} for d in default_docs]
-        items = [{k: v for k, v in d.items() if k != "_id"} for d in items]
+        # Only seed default items on first access (when company has zero prep items globally).
+        # If unit_id was provided, the list being empty means items were deleted — do NOT re-seed.
+        if not unit_id:
+            total = await db.prep_items.count_documents({"company_id": user["company_id"]})
+            if total == 0:
+                default_docs = [
+                    {
+                        "id": str(uuid.uuid4()),
+                        "company_id": user["company_id"],
+                        "name": name,
+                        "order": idx,
+                        "active": True,
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    for idx, name in enumerate(DEFAULT_PREP_ITEMS)
+                ]
+                await db.prep_items.insert_many(default_docs)
+                items = [{"_id": None, **d} for d in default_docs]
+                items = [{k: v for k, v in d.items() if k != "_id"} for d in items]
     return items
 
 @api_router.post("/prep/items")
