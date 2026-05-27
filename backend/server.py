@@ -2246,26 +2246,6 @@ async def get_prep_items(unit_id: Optional[str] = None, user: dict = Depends(get
         items = await db.prep_items.find(
             {"company_id": user["company_id"]}, {"_id": 0}
         ).sort("order", 1).to_list(200)
-    if not items:
-        # Only seed default items on first access (when company has zero prep items globally).
-        # If unit_id was provided, the list being empty means items were deleted — do NOT re-seed.
-        if not unit_id:
-            total = await db.prep_items.count_documents({"company_id": user["company_id"]})
-            if total == 0:
-                default_docs = [
-                    {
-                        "id": str(uuid.uuid4()),
-                        "company_id": user["company_id"],
-                        "name": name,
-                        "order": idx,
-                        "active": True,
-                        "created_at": datetime.now(timezone.utc).isoformat()
-                    }
-                    for idx, name in enumerate(DEFAULT_PREP_ITEMS)
-                ]
-                await db.prep_items.insert_many(default_docs)
-                items = [{"_id": None, **d} for d in default_docs]
-                items = [{k: v for k, v in d.items() if k != "_id"} for d in items]
     return items
 
 @api_router.post("/prep/items")
@@ -2297,6 +2277,16 @@ async def delete_prep_item(item_id: str, unit_id: Optional[str] = None, user: di
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Item not found or does not belong to this unit")
     return {"message": "Item deleted"}
+
+@api_router.delete("/prep/items")
+async def delete_all_prep_items(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    """Delete ALL prep items for a unit (or all company items if no unit_id). Admin only."""
+    require_admin(user)
+    query = {"company_id": user["company_id"]}
+    if unit_id:
+        query["unit_id"] = unit_id
+    result = await db.prep_items.delete_many(query)
+    return {"message": f"Deleted {result.deleted_count} prep items"}
 
 @api_router.get("/prep/today")
 async def get_today_checklist(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
