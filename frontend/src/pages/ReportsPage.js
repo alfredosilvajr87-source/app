@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useUnit } from '../context/UnitContext';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
-import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
@@ -165,145 +164,32 @@ const ReportsPage = () => {
     } catch { toast.error('Failed to generate PDF'); }
   };
 
-  // ── Excel export ─────────────────────────────────────────────────
+  // ── Excel export — always uses backend (single or multi-unit) ────
   const exportToExcel = async (type) => {
-    const dateStr   = format(new Date(), 'yyyy-MM-dd');
-    const startStr  = format(dateRange.start, 'yyyy-MM-dd');
-    const endStr    = format(dateRange.end,   'yyyy-MM-dd');
-    const unitLabel = multiUnit
-      ? selectedUnitIds.map(uid => availableUnits.find(u => u.id === uid)?.initials || '').join('+')
-      : (availableUnits.find(u => u.id === selectedUnitIds[0])?.initials || 'unit');
+    const startStr = format(dateRange.start, 'yyyy-MM-dd');
+    const endStr   = format(dateRange.end,   'yyyy-MM-dd');
+    const uid      = selectedUnitIds[0];
+    const idsParam = selectedUnitIds.join(',');
 
-    // ── Single unit: professional styled report from backend ───────
-    if (!multiUnit) {
-      const uid = selectedUnitIds[0];
-      try {
-        let res;
-        if (type === 'stock')
-          res = await axios.get(`${API}/reports/stock-status/${uid}/excel`);
-        else if (type === 'consumption')
-          res = await axios.get(`${API}/reports/consumption/${uid}/excel?days=30`);
-        else if (type === 'orders')
-          res = await axios.get(`${API}/reports/orders-history/${uid}/excel?start_date=${startStr}&end_date=${endStr}`);
-        else if (type === 'waste')
-          res = await axios.get(`${API}/reports/waste/${uid}/excel?days=30`);
+    try {
+      let res;
+      if (type === 'stock')
+        res = await axios.get(`${API}/reports/stock-status/${uid}/excel?unit_ids=${idsParam}`);
+      else if (type === 'consumption')
+        res = await axios.get(`${API}/reports/consumption/${uid}/excel?unit_ids=${idsParam}&days=30`);
+      else if (type === 'orders')
+        res = await axios.get(`${API}/reports/orders-history/${uid}/excel?unit_ids=${idsParam}&start_date=${startStr}&end_date=${endStr}`);
+      else if (type === 'waste')
+        res = await axios.get(`${API}/reports/waste/${uid}/excel?unit_ids=${idsParam}&days=30`);
 
-        const link = document.createElement('a');
-        link.href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${res.data.excel_base64}`;
-        link.download = res.data.filename;
-        link.click();
-        toast.success('Excel report ready');
-      } catch (err) {
-        console.error(err);
-        toast.error('Failed to generate Excel report');
-      }
-      return;
-    }
-
-    // ── Multi-unit: basic SheetJS export ───────────────────────────
-    const wb = XLSX.utils.book_new();
-
-    const addSheet = (rows, sheetName, colWidths, adminOnlyCols = []) => {
-      if (!rows.length) return;
-      const data = rows.map(row => {
-        const r = { ...row };
-        if (!isAdmin) adminOnlyCols.forEach(k => delete r[k]);
-        return r;
-      });
-      const ws = XLSX.utils.json_to_sheet(data);
-      ws['!cols'] = colWidths.map(w => ({ wch: w }));
-      XLSX.utils.book_append_sheet(wb, ws, sheetName);
-    };
-
-    if (type === 'stock') {
-      const filtered = stockStatusFilter === 'all' ? stockStatus : stockStatus.filter(i => i.status === stockStatusFilter);
-      addSheet(
-        filtered.map(i => ({
-          'Unit': i.unit_name, 'Item': i.item_name, 'Section': i.section_name,
-          'UoM': i.unit_of_measure, 'Current Stock': i.current_stock,
-          'Minimum Stock': i.minimum_stock, 'Status': i.status.toUpperCase(),
-          'Last Entry': i.last_entry_date || '—',
-          'Price (€)': i.price || 0, 'Stock Value (€)': i.stock_value || 0, 'To Buy (€)': i.to_min_value || 0,
-        })),
-        'All Items', [18,30,20,10,14,14,10,14,12,16,12],
-        ['Price (€)', 'Stock Value (€)', 'To Buy (€)']
-      );
-      addSheet(
-        stockStatus.filter(i => i.status === 'critical').map(i => ({
-          'Unit': i.unit_name, 'Item': i.item_name, 'Section': i.section_name,
-          'Current': i.current_stock, 'Minimum': i.minimum_stock,
-          'UoM': i.unit_of_measure, 'To Buy (€)': i.to_min_value || 0,
-        })),
-        'Critical Items', [18,30,20,10,10,8,12], ['To Buy (€)']
-      );
-      XLSX.writeFile(wb, `stock_${unitLabel}_${dateStr}.xlsx`);
-      toast.success('Excel exported — Stock Status');
-    }
-    else if (type === 'consumption') {
-      addSheet(
-        consumption.map(i => ({
-          'Unit': i.unit_name, 'Item': i.item_name, 'Section': i.section_name, 'UoM': i.unit_of_measure,
-          'Total (30d)': i.total_consumption, 'Daily Avg': i.average_daily, 'Entries': i.entries_count,
-          'Price (€)': i.price || 0, 'Total Cost (€)': i.total_cost || 0,
-          'Daily Cost (€)': i.daily_cost || 0, 'Monthly Est. (€)': i.monthly_cost || 0,
-        })),
-        'Consumption', [18,30,20,8,14,10,8,12,14,14,16],
-        ['Price (€)', 'Total Cost (€)', 'Daily Cost (€)', 'Monthly Est. (€)']
-      );
-      XLSX.writeFile(wb, `consumption_${unitLabel}_${dateStr}.xlsx`);
-      toast.success('Excel exported — Consumption');
-    }
-    else if (type === 'orders') {
-      addSheet(
-        ordersHistory.orders.map(o => ({
-          'Unit': o.unit_name, 'Order #': o.order_number, 'Target Date': o.target_date,
-          'Items': o.items.length, 'Status': o.status,
-          'Created': new Date(o.created_at).toLocaleString(),
-        })),
-        'Orders', [18,16,14,8,12,22]
-      );
-      addSheet([{
-        'Total Orders': ordersHistory.summary.total || 0,
-        'Pending': ordersHistory.summary.pending || 0,
-        'Completed': ordersHistory.summary.completed || 0,
-        'Units': selectedUnitIds.map(uid => unitName(uid)).join(', '),
-        'Period Start': startStr, 'Period End': endStr,
-      }], 'Summary', [14,10,12,30,14,12]);
-      XLSX.writeFile(wb, `orders_${unitLabel}_${startStr}_${endStr}.xlsx`);
-      toast.success('Excel exported — Orders');
-    }
-    else if (type === 'waste') {
-      addSheet(
-        wasteEntries.map(e => {
-          const item  = consumption.find(c => c.item_id === e.item_id && c.unit_name === e.unit_name);
-          const price = e.item_price || item?.price || 0;
-          const cost  = e.estimated_cost || (e.quantity * price);
-          return {
-            'Unit': e.unit_name, 'Date': e.date, 'Item': e.item_name,
-            'Quantity': e.quantity, 'UoM': e.unit_of_measure,
-            'Reason': e.reason_name, 'Initials': e.initials,
-            'Est. Cost (€)': price > 0 ? parseFloat(cost.toFixed(2)) : 0,
-            'Notes': e.notes || '',
-          };
-        }),
-        'Waste Detail', [18,12,30,10,8,16,10,14,30], ['Est. Cost (€)']
-      );
-      const byReason = wasteEntries.reduce((acc, e) => {
-        const k = e.reason_name || 'Other';
-        if (!acc[k]) acc[k] = { reason: k, events: 0, cost: 0 };
-        acc[k].events++;
-        const price = e.item_price || consumption.find(c => c.item_id === e.item_id)?.price || 0;
-        acc[k].cost += e.estimated_cost || (e.quantity * price);
-        return acc;
-      }, {});
-      addSheet(
-        Object.values(byReason).sort((a,b) => b.events - a.events).map(r => ({
-          'Reason': r.reason, 'Events': r.events, 'Est. Cost (€)': parseFloat(r.cost.toFixed(2)),
-        })),
-        'By Reason', [20,10,14], ['Est. Cost (€)']
-      );
-      XLSX.writeFile(wb, `waste_${unitLabel}_${dateStr}.xlsx`);
-      toast.success('Excel exported — Waste');
+      const link = document.createElement('a');
+      link.href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${res.data.excel_base64}`;
+      link.download = res.data.filename;
+      link.click();
+      toast.success('Excel report ready');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to generate Excel report');
     }
   };
 
