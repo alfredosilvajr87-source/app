@@ -1191,9 +1191,12 @@ async def get_stock_entries(unit_id: str, date: Optional[str] = None, user: dict
     return result
 
 @api_router.get("/stock-entries/{unit_id}/latest", response_model=List[StockEntryResponse])
-async def get_latest_stock_entries(unit_id: str, user: dict = Depends(get_current_user)):
+async def get_latest_stock_entries(unit_id: str, date: Optional[str] = None, user: dict = Depends(get_current_user)):
+    match_filter = {"unit_id": unit_id}
+    if date:
+        match_filter["entry_date"] = date
     pipeline = [
-        {"$match": {"unit_id": unit_id}},
+        {"$match": match_filter},
         {"$sort": {"entry_date": -1, "created_at": -1}},
         {"$group": {
             "_id": "$item_id",

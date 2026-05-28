@@ -93,10 +93,11 @@ const DailyEntryPage = () => {
 
   const fetchData = async () => {
     setLoading(true);
+    const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
     try {
       const [itemsRes, entriesRes] = await Promise.all([
         axios.get(`${API}/items?unit_id=${currentUnit.id}`),
-        axios.get(`${API}/stock-entries/${currentUnit.id}/latest`)
+        axios.get(`${API}/stock-entries/${currentUnit.id}/latest?date=${todayStr}`)
       ]);
       setItems(itemsRes.data);
       const entriesMap = {};
