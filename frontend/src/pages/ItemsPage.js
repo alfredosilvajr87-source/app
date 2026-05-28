@@ -50,16 +50,6 @@ import {
 
 import { API_URL as API } from '../config';
 
-const DAYS_OF_WEEK = [
-  { key: 'monday', label: 'Mon' },
-  { key: 'tuesday', label: 'Tue' },
-  { key: 'wednesday', label: 'Wed' },
-  { key: 'thursday', label: 'Thu' },
-  { key: 'friday', label: 'Fri' },
-  { key: 'saturday', label: 'Sat' },
-  { key: 'sunday', label: 'Sun' },
-];
-
 // Maps day-of-week index (0=Mon) to the unit config field name
 const DAY_CONFIG_KEYS = ['mon_qty', 'tue_qty', 'wed_qty', 'thu_qty', 'fri_qty', 'sat_qty', 'sun_qty'];
 const DAY_SHORT_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -594,43 +584,6 @@ const ItemsPage = () => {
                     onChange={(e) => setFormData({ ...formData, minimum_stock: parseInt(e.target.value) || 0 })}
                   />
                 </div>
-
-                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-                  <div>
-                    <Label>Use different minimum per day</Label>
-                    <p className="text-xs text-slate-500">Set specific minimums for each day of the week</p>
-                  </div>
-                  <Switch
-                    checked={formData.use_daily_minimum}
-                    onCheckedChange={(checked) => setFormData({ ...formData, use_daily_minimum: checked })}
-                    data-testid="use-daily-minimum-switch"
-                  />
-                </div>
-
-                {formData.use_daily_minimum && (
-                  <div className="grid grid-cols-7 gap-2">
-                    {DAYS_OF_WEEK.map((day) => (
-                      <div key={day.key} className="space-y-1">
-                        <Label className="text-xs text-center block">{day.label}</Label>
-                        <Input
-                          type="number"
-                          step="1"
-                          min="0"
-                          className="text-center text-sm"
-                          value={formData.minimum_stock_by_day[day.key]}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            minimum_stock_by_day: {
-                              ...formData.minimum_stock_by_day,
-                              [day.key]: parseInt(e.target.value) || 0
-                            }
-                          })}
-                          data-testid={`min-stock-${day.key}`}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="average_consumption">Avg Daily Consumption</Label>
