@@ -173,6 +173,29 @@ class ItemResponse(BaseModel):
     team: Optional[str] = ""
     created_at: str
 
+# Per-unit operational config for an item (overrides global item defaults)
+class ItemUnitConfigCreate(BaseModel):
+    minimum_stock: Optional[float] = None   # overrides item.minimum_stock for this unit
+    mon_qty: Optional[float] = None
+    tue_qty: Optional[float] = None
+    wed_qty: Optional[float] = None
+    thu_qty: Optional[float] = None
+    fri_qty: Optional[float] = None
+    sat_qty: Optional[float] = None
+    sun_qty: Optional[float] = None
+
+class ItemUnitConfigResponse(BaseModel):
+    item_id: str
+    unit_id: str
+    minimum_stock: Optional[float] = None
+    mon_qty: Optional[float] = None
+    tue_qty: Optional[float] = None
+    wed_qty: Optional[float] = None
+    thu_qty: Optional[float] = None
+    fri_qty: Optional[float] = None
+    sat_qty: Optional[float] = None
+    sun_qty: Optional[float] = None
+
 # Available units of measure
 UNITS_OF_MEASURE = [
     {"value": "kg", "label": "Kilogram (kg)"},
@@ -1319,7 +1342,10 @@ async def calculate_order(unit_id: str, target_date: str, user: dict = Depends(g
     # Get all items with sections
     items = await db.items.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(1000)
     sections = {s["id"]: s["name"] for s in await db.sections.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(100)}
-    
+
+    # Load per-unit configs for this unit
+    unit_cfgs = await get_unit_configs_map(unit_id, user["company_id"])
+
     # Get latest stock entries
     latest_entries = {}
     pipeline = [
@@ -1332,21 +1358,30 @@ async def calculate_order(unit_id: str, target_date: str, user: dict = Depends(g
     ]
     for entry in await db.stock_entries.aggregate(pipeline).to_list(1000):
         latest_entries[entry["_id"]] = entry["quantity"]
-    
+
     # Calculate order items
     order_items = []
     for item in items:
         current_stock = latest_entries.get(item["id"], 0)
-        minimum_stock = item.get("minimum_stock", 0)
+        unit_cfg = unit_cfgs.get(item["id"])
+
+        # Use unit-specific minimum or global
+        minimum_stock = effective_minimum_stock(item, unit_cfg)
+
+        # Use unit-specific day qty if configured, otherwise fall back to minimum_stock
+        day_qty = effective_day_qty(item, unit_cfg, day_of_week)
+        if day_qty is not None:
+            minimum_stock = day_qty
+
         avg_consumption = item.get("average_consumption", 0)
-        
+
         # Adjusted minimum = base minimum + day increment
         adjusted_minimum = minimum_stock + quantity_increment
-        
+
         # Calculation: (Adjusted Minimum + Average Consumption) - Current Stock
         needed = (adjusted_minimum + avg_consumption) - current_stock
         needed_rounded = max(0, round(needed))  # Round to integer, no decimals
-        
+
         if needed_rounded > 0:
             order_items.append({
                 "item_id": item["id"],
@@ -1592,6 +1627,66 @@ async def generate_order_pdf(order_id: str, user: dict = Depends(get_current_use
         "share_text": f"Purchase Order for {unit_name} - Target: {order['target_date']} - Created: {created_at.strftime('%Y-%m-%d %H:%M')}"
     }
 
+# ==================== ITEM UNIT CONFIG ====================
+
+async def get_unit_configs_map(unit_id: str, company_id: str) -> dict:
+    """Returns {item_id: config_doc} for all configs of this unit."""
+    configs = await db.item_unit_configs.find(
+        {"unit_id": unit_id, "company_id": company_id}, {"_id": 0}
+    ).to_list(2000)
+    return {c["item_id"]: c for c in configs}
+
+def effective_minimum_stock(item: dict, unit_cfg: Optional[dict]) -> float:
+    """Return the minimum_stock to use: unit-specific override > global item value."""
+    if unit_cfg and unit_cfg.get("minimum_stock") is not None:
+        return unit_cfg["minimum_stock"]
+    return item.get("minimum_stock", 0)
+
+def effective_day_qty(item: dict, unit_cfg: Optional[dict], day_of_week: int) -> Optional[float]:
+    """Return the day-specific required quantity for a given day (0=Mon…6=Sun), or None."""
+    day_keys = ["mon_qty", "tue_qty", "wed_qty", "thu_qty", "fri_qty", "sat_qty", "sun_qty"]
+    key = day_keys[day_of_week]
+    if unit_cfg and unit_cfg.get(key) is not None:
+        return unit_cfg[key]
+    # Fall back to global minimum_stock_by_day if set
+    msd = item.get("minimum_stock_by_day")
+    if msd:
+        global_day_keys = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        val = msd.get(global_day_keys[day_of_week])
+        if val is not None and val > 0:
+            return float(val)
+    return None
+
+@api_router.get("/item-unit-config/{unit_id}")
+async def get_item_unit_configs(unit_id: str, user: dict = Depends(get_current_user)):
+    """Get all per-unit configs for a given unit, keyed by item_id."""
+    configs_map = await get_unit_configs_map(unit_id, user["company_id"])
+    return configs_map
+
+@api_router.put("/item-unit-config/{unit_id}/{item_id}")
+async def upsert_item_unit_config(unit_id: str, item_id: str, config: ItemUnitConfigCreate, user: dict = Depends(get_current_user)):
+    """Create or update per-unit config for a specific item+unit pair."""
+    # Verify item belongs to company
+    item = await db.items.find_one({"id": item_id, "company_id": user["company_id"]}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    # Verify unit belongs to company
+    unit = await db.units.find_one({"id": unit_id, "company_id": user["company_id"]}, {"_id": 0})
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unit not found")
+
+    doc = config.model_dump()
+    doc["item_id"] = item_id
+    doc["unit_id"] = unit_id
+    doc["company_id"] = user["company_id"]
+
+    await db.item_unit_configs.update_one(
+        {"item_id": item_id, "unit_id": unit_id, "company_id": user["company_id"]},
+        {"$set": doc},
+        upsert=True
+    )
+    return doc
+
 # ==================== REPORTS ====================
 
 @api_router.get("/reports/dashboard/{unit_id}")
@@ -1609,18 +1704,19 @@ async def get_dashboard_stats(unit_id: str, user: dict = Depends(get_current_use
         }}
     ]
     latest_entries = {e["_id"]: e["quantity"] for e in await db.stock_entries.aggregate(pipeline).to_list(1000)}
-    
+
     items = await db.items.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(1000)
+    unit_cfgs = await get_unit_configs_map(unit_id, user["company_id"])
     low_stock_count = 0
     critical_stock_count = 0
-    
+
     for item in items:
         # Skip items not visible in this unit
         visible_units = item.get("visible_in_units", [])
         if visible_units and unit_id not in visible_units:
             continue
         current = latest_entries.get(item["id"], 0)
-        minimum = item.get("minimum_stock", 0)
+        minimum = effective_minimum_stock(item, unit_cfgs.get(item["id"]))
         if minimum > 0:
             ratio = current / minimum
             if ratio < 0.5:
@@ -1656,7 +1752,9 @@ async def get_stock_status_report(unit_id: str, user: dict = Depends(get_current
         }}
     ]
     latest_entries = {e["_id"]: {"quantity": e["quantity"], "date": e["entry_date"]} for e in await db.stock_entries.aggregate(pipeline).to_list(1000)}
-    
+
+    unit_cfgs = await get_unit_configs_map(unit_id, user["company_id"])
+
     result = []
     for item in items:
         # Skip items not visible in this unit
@@ -1668,7 +1766,7 @@ async def get_stock_status_report(unit_id: str, user: dict = Depends(get_current
             continue
         entry = latest_entries.get(item["id"], {"quantity": 0, "date": None})
         current = entry["quantity"]
-        minimum = item.get("minimum_stock", 0)
+        minimum = effective_minimum_stock(item, unit_cfgs.get(item["id"]))
         
         status = "ok"
         if minimum > 0:
@@ -2451,7 +2549,6 @@ async def get_waste_entries(unit_id: Optional[str] = None, user: dict = Depends(
     since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
     query = {"company_id": user["company_id"], "date": {"$gte": since}}
     if unit_id:
-        # Strict filter — only this unit's entries
         query["unit_id"] = unit_id
     entries = await db.waste_entries.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
     return entries
@@ -2466,35 +2563,29 @@ async def delete_waste_entry(entry_id: str, user: dict = Depends(get_current_use
 
 @api_router.post("/admin/migrate-unit-ids")
 async def migrate_unit_ids(user: dict = Depends(get_current_user)):
-    """One-time migration: assign unit_id to documents missing it.
-    Uses the FIRST unit of the company as default."""
+    """One-time migration: assign unit_id to documents missing it."""
     require_admin(user)
     company_id = user["company_id"]
-    # Get first unit
     first_unit = await db.units.find_one({"company_id": company_id}, {"_id": 0})
     if not first_unit:
         return {"message": "No units found"}
     unit_id = first_unit["id"]
     results = {}
-    # Fix prep_items
     r1 = await db.prep_items.update_many(
         {"company_id": company_id, "unit_id": {"$in": ["", None]}},
         {"$set": {"unit_id": unit_id}}
     )
     results["prep_items"] = r1.modified_count
-    # Fix prep_checks
     r2 = await db.prep_checks.update_many(
         {"company_id": company_id, "unit_id": {"$in": ["", None]}},
         {"$set": {"unit_id": unit_id}}
     )
     results["prep_checks"] = r2.modified_count
-    # Fix waste_entries
     r3 = await db.waste_entries.update_many(
         {"company_id": company_id, "unit_id": {"$in": ["", None]}},
         {"$set": {"unit_id": unit_id}}
     )
     results["waste_entries"] = r3.modified_count
-    # Fix stock_entries
     r4 = await db.stock_entries.update_many(
         {"unit_id": {"$in": ["", None]}, "company_id": company_id},
         {"$set": {"unit_id": unit_id}}

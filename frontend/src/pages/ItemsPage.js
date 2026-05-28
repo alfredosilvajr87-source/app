@@ -60,6 +60,10 @@ const DAYS_OF_WEEK = [
   { key: 'sunday', label: 'Sun' },
 ];
 
+// Maps day-of-week index (0=Mon) to the unit config field name
+const DAY_CONFIG_KEYS = ['mon_qty', 'tue_qty', 'wed_qty', 'thu_qty', 'fri_qty', 'sat_qty', 'sun_qty'];
+const DAY_SHORT_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
 const ITEM_TYPES = [
   { value: 'all', label: 'All (Restaurant & Factory)', icon: null },
   { value: 'restaurant', label: 'Restaurant Only', icon: Store },
@@ -77,6 +81,9 @@ const ItemsPage = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [deletingItem, setDeletingItem] = useState(null);
+  // unitConfigs: { [unit_id]: { minimum_stock, mon_qty, ... } } for the item being edited
+  const [unitConfigs, setUnitConfigs] = useState({});
+  const [savingUnitConfigs, setSavingUnitConfigs] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSection, setFilterSection] = useState('all');
   const [filterType, setFilterType] = useState('all');
@@ -158,7 +165,7 @@ const ItemsPage = () => {
     }
   };
 
-  const handleEdit = (item) => {
+  const handleEdit = async (item) => {
     setEditingItem(item);
     const hasDailyMinimum = item.minimum_stock_by_day && Object.values(item.minimum_stock_by_day).some(v => v > 0);
     setFormData({
@@ -178,6 +185,19 @@ const ItemsPage = () => {
       team: item.team || '',
       price: item.price || 0
     });
+
+    // Load per-unit configs for this item across all units
+    const cfgs = {};
+    await Promise.all(units.map(async (u) => {
+      try {
+        const res = await axios.get(`${API}/item-unit-config/${u.id}`);
+        const cfg = res.data[item.id];
+        cfgs[u.id] = cfg || { minimum_stock: null, mon_qty: null, tue_qty: null, wed_qty: null, thu_qty: null, fri_qty: null, sat_qty: null, sun_qty: null };
+      } catch {
+        cfgs[u.id] = { minimum_stock: null, mon_qty: null, tue_qty: null, wed_qty: null, thu_qty: null, fri_qty: null, sat_qty: null, sun_qty: null };
+      }
+    }));
+    setUnitConfigs(cfgs);
     setDialogOpen(true);
   };
 
@@ -212,9 +232,34 @@ const ItemsPage = () => {
     });
   };
 
+  const handleSaveUnitConfigs = async () => {
+    if (!editingItem) return;
+    setSavingUnitConfigs(true);
+    try {
+      await Promise.all(
+        Object.entries(unitConfigs).map(([unit_id, cfg]) =>
+          axios.put(`${API}/item-unit-config/${unit_id}/${editingItem.id}`, cfg)
+        )
+      );
+      toast.success('Per-unit configurations saved');
+    } catch {
+      toast.error('Failed to save unit configurations');
+    } finally {
+      setSavingUnitConfigs(false);
+    }
+  };
+
+  const updateUnitConfig = (unitId, field, value) => {
+    setUnitConfigs(prev => ({
+      ...prev,
+      [unitId]: { ...prev[unitId], [field]: value === '' ? null : parseFloat(value) }
+    }));
+  };
+
   const openNewDialog = () => {
     setEditingItem(null);
     resetForm();
+    setUnitConfigs({});
     setDialogOpen(true);
   };
 
@@ -449,10 +494,11 @@ const ItemsPage = () => {
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <Tabs defaultValue="basic" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="basic">Basic Info</TabsTrigger>
                 <TabsTrigger value="stock">Min Stock</TabsTrigger>
                 <TabsTrigger value="visibility">Visibility</TabsTrigger>
+                <TabsTrigger value="perunit" disabled={!editingItem}>Per-Unit</TabsTrigger>
               </TabsList>
 
               <TabsContent value="basic" className="space-y-4 mt-4">
@@ -688,6 +734,76 @@ const ItemsPage = () => {
                   )}
                 </div>
               </TabsContent>
+
+              {/* Per-Unit Config Tab */}
+              <TabsContent value="perunit" className="space-y-4 mt-4">
+                <p className="text-xs text-slate-500">
+                  Override minimum stock and daily quantities per unit. Leave blank to use the global values defined in the "Min Stock" tab.
+                </p>
+                {units.length === 0 ? (
+                  <p className="text-sm text-slate-400">No units created yet.</p>
+                ) : (
+                  <div className="space-y-5">
+                    {units.map(u => {
+                      const cfg = unitConfigs[u.id] || {};
+                      return (
+                        <div key={u.id} className="rounded-lg border border-slate-200 p-4 space-y-3">
+                          <p className="font-semibold text-sm text-slate-700">
+                            🏠 {u.name} <span className="text-slate-400 font-normal">({u.initials})</span>
+                          </p>
+                          {/* Minimum stock override */}
+                          <div className="flex items-center gap-3">
+                            <Label className="w-32 text-xs shrink-0">Min Stock</Label>
+                            <Input
+                              type="number"
+                              step="0.5"
+                              min="0"
+                              className="w-28 text-sm"
+                              placeholder={`default: ${formData.minimum_stock}`}
+                              value={cfg.minimum_stock ?? ''}
+                              onChange={e => updateUnitConfig(u.id, 'minimum_stock', e.target.value)}
+                            />
+                            <span className="text-xs text-slate-400">{formData.unit_of_measure}</span>
+                          </div>
+                          {/* Per-day quantities */}
+                          <div>
+                            <Label className="text-xs text-slate-500 block mb-1.5">Qty needed per day of week</Label>
+                            <div className="grid grid-cols-7 gap-1.5">
+                              {DAY_SHORT_LABELS.map((label, idx) => {
+                                const key = DAY_CONFIG_KEYS[idx];
+                                return (
+                                  <div key={key} className="space-y-1">
+                                    <Label className="text-xs text-center block text-slate-400">{label}</Label>
+                                    <Input
+                                      type="number"
+                                      step="1"
+                                      min="0"
+                                      className="text-center text-xs px-1"
+                                      placeholder="—"
+                                      value={cfg[key] ?? ''}
+                                      onChange={e => updateUnitConfig(u.id, key, e.target.value)}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="pt-2">
+                  <Button
+                    type="button"
+                    onClick={handleSaveUnitConfigs}
+                    disabled={savingUnitConfigs}
+                    className="w-full"
+                  >
+                    {savingUnitConfigs ? 'Saving...' : 'Save Per-Unit Configurations'}
+                  </Button>
+                </div>
+              </TabsContent>
             </Tabs>
 
             <DialogFooter className="mt-6">
@@ -720,6 +836,136 @@ const ItemsPage = () => {
             >
               Delete
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+};
+
+export default ItemsPage;
+                          >
+                            {unit.name} ({unit.initials})
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {formData.visible_in_units.length > 0 && (
+                    <p className="text-xs text-amber-600">
+                      This item will only appear in {formData.visible_in_units.length} selected unit(s)
+                    </p>
+                  )}
+                </div>
+              </TabsContent>
+
+              {/* Per-Unit Config Tab */}
+              <TabsContent value="perunit" className="space-y-4 mt-4">
+                <p className="text-xs text-slate-500">
+                  Override minimum stock and daily quantities per unit. Leave blank to use the global values defined in the "Min Stock" tab.
+                </p>
+                {units.length === 0 ? (
+                  <p className="text-sm text-slate-400">No units created yet.</p>
+                ) : (
+                  <div className="space-y-5">
+                    {units.map(u => {
+                      const cfg = unitConfigs[u.id] || {};
+                      return (
+                        <div key={u.id} className="rounded-lg border border-slate-200 p-4 space-y-3">
+                          <p className="font-semibold text-sm text-slate-700">
+                            {u.name} <span className="text-slate-400 font-normal">({u.initials})</span>
+                          </p>
+                          <div className="flex items-center gap-3">
+                            <Label className="w-32 text-xs shrink-0">Min Stock</Label>
+                            <Input
+                              type="number"
+                              step="0.5"
+                              min="0"
+                              className="w-28 text-sm"
+                              placeholder={`default: ${formData.minimum_stock}`}
+                              value={cfg.minimum_stock ?? ''}
+                              onChange={e => updateUnitConfig(u.id, 'minimum_stock', e.target.value)}
+                            />
+                            <span className="text-xs text-slate-400">{formData.unit_of_measure}</span>
+                          </div>
+                          <div>
+                            <Label className="text-xs text-slate-500 block mb-1.5">Qty needed per day</Label>
+                            <div className="grid grid-cols-7 gap-1.5">
+                              {DAY_SHORT_LABELS.map((label, idx) => {
+                                const key = DAY_CONFIG_KEYS[idx];
+                                return (
+                                  <div key={key} className="space-y-1">
+                                    <Label className="text-xs text-center block text-slate-400">{label}</Label>
+                                    <Input
+                                      type="number"
+                                      step="1"
+                                      min="0"
+                                      className="text-center text-xs px-1"
+                                      placeholder="—"
+                                      value={cfg[key] ?? ''}
+                                      onChange={e => updateUnitConfig(u.id, key, e.target.value)}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="pt-2">
+                  <Button
+                    type="button"
+                    onClick={handleSaveUnitConfigs}
+                    disabled={savingUnitConfigs}
+                    className="w-full"
+                  >
+                    {savingUnitConfigs ? 'Saving...' : 'Save Per-Unit Configurations'}
+                  </Button>
+                </div>
+              </TabsContent>
+            </Tabs>
+
+            <DialogFooter className="mt-6">
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" data-testid="item-submit-btn">
+                {editingItem ? 'Update' : 'Create'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent data-testid="delete-item-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Item</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deletingItem?.name}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-red-600 hover:bg-red-700"
+              data-testid="confirm-delete-item"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+};
+
+export default ItemsPage;
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
