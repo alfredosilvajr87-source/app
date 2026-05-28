@@ -1340,8 +1340,11 @@ async def calculate_order(unit_id: str, target_date: str, user: dict = Depends(g
     )
     quantity_increment = safety_config["quantity_increment"] if safety_config and safety_config.get("enabled") else 0
     
-    # Get all items with sections
-    items = await db.items.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(1000)
+    # Get only items visible for this unit (respects visible_in_units config)
+    items = await db.items.find(
+        {"company_id": user["company_id"], "visible_in_units": unit_id},
+        {"_id": 0}
+    ).to_list(1000)
     sections = {s["id"]: s["name"] for s in await db.sections.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(100)}
 
     # Load per-unit configs for this unit
@@ -2968,15 +2971,6 @@ async def delete_prep_item(item_id: str, unit_id: Optional[str] = None, user: di
         raise HTTPException(status_code=404, detail="Item not found or does not belong to this unit")
     return {"message": "Item deleted"}
 
-@api_router.delete("/prep/items")
-async def delete_all_prep_items(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
-    """Delete ALL prep items for a unit (or all company items if no unit_id). Admin only."""
-    require_admin(user)
-    query = {"company_id": user["company_id"]}
-    if unit_id:
-        query["unit_id"] = unit_id
-    result = await db.prep_items.delete_many(query)
-    return {"message": f"Deleted {result.deleted_count} prep items"}
 
 @api_router.get("/prep/today")
 async def get_today_checklist(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):

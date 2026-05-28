@@ -227,8 +227,8 @@ const DailyEntryPage = () => {
           {Object.entries(groupedItems).map(([sectionName, teamGroups]) => {
             const totalItems = Object.values(teamGroups).flat().length;
             if (totalItems === 0) return null;
-            const hasMultipleTeams = teamFilter === 'All' &&
-              [teamGroups.Front, teamGroups.Kitchen].filter(g => g.length > 0).length > 1;
+            const hasTeamColors = teamFilter === 'All' &&
+              [teamGroups.Front, teamGroups.Kitchen].some(g => g.length > 0);
 
             return (
               <Card key={sectionName} data-testid={`entry-section-${sectionName}`}>
@@ -237,7 +237,7 @@ const DailyEntryPage = () => {
                   <CardDescription>{totalItems} items</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {hasMultipleTeams ? (
+                  {hasTeamColors ? (
                     ['Front', 'Kitchen'].map(team => {
                       const teamItems = teamGroups[team];
                       if (teamItems.length === 0) return null;
