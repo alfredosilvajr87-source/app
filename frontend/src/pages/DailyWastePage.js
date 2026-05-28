@@ -39,11 +39,12 @@ export default function DailyWastePage() {
   });
 
   const fetchData = useCallback(async () => {
+    if (!currentUnit) return; // never fetch without unit — would return all-company data
     setLoading(true);
     try {
       const [entriesRes, itemsRes, reasonsRes] = await Promise.all([
-        axios.get(`${API}/waste/entries?days=${daysFilter}${currentUnit ? '&unit_id=' + currentUnit.id : ''}`),
-        axios.get(`${API}/items${currentUnit ? '?unit_id=' + currentUnit.id : ''}`),
+        axios.get(`${API}/waste/entries?days=${daysFilter}&unit_id=${currentUnit.id}`),
+        axios.get(`${API}/items?unit_id=${currentUnit.id}`),
         axios.get(`${API}/waste/reasons`),
       ]);
       setEntries(entriesRes.data);

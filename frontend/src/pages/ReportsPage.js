@@ -358,14 +358,30 @@ const ReportsPage = () => {
     }
   };
 
+  // ── Aggregate by item name when multi-unit (sum values across units) ─
+  const aggregateByName = (arr, fields) => {
+    const map = {};
+    arr.forEach(item => {
+      const key = item.item_name;
+      if (!map[key]) { map[key] = { ...item }; }
+      else { fields.forEach(f => { map[key][f] = (map[key][f] || 0) + (item[f] || 0); }); }
+    });
+    return Object.values(map);
+  };
+
+  const stockAgg       = multiUnit ? aggregateByName(stockStatus, ['current_stock','minimum_stock','stock_value','to_min_value']) : stockStatus;
+  const consAgg        = multiUnit ? aggregateByName(consumption,  ['total_consumption','entries_count','total_cost','monthly_cost','daily_cost']).map(i => ({ ...i, average_daily: round2(i.total_consumption / 30) })) : consumption;
+
+  function round2(v) { return Math.round((v || 0) * 100) / 100; }
+
   // ── Computed values ───────────────────────────────────────────────
-  const criticalItems    = stockStatus.filter(i => i.status === 'critical');
-  const lowItems         = stockStatus.filter(i => i.status === 'low');
-  const totalStockValue  = stockStatus.reduce((s, i) => s + (i.stock_value || 0), 0);
-  const totalToMinValue  = stockStatus.reduce((s, i) => s + (i.to_min_value || 0), 0);
-  const totalMonthCost   = consumption.reduce((s, i) => s + (i.monthly_cost || 0), 0);
-  const totalConsCost    = consumption.reduce((s, i) => s + (i.total_cost || 0), 0);
-  const top5Consumption  = consumption.slice(0, 5);
+  const criticalItems    = stockAgg.filter(i => i.status === 'critical');
+  const lowItems         = stockAgg.filter(i => i.status === 'low');
+  const totalStockValue  = stockAgg.reduce((s, i) => s + (i.stock_value || 0), 0);
+  const totalToMinValue  = stockAgg.reduce((s, i) => s + (i.to_min_value || 0), 0);
+  const totalMonthCost   = consAgg.reduce((s, i) => s + (i.monthly_cost || 0), 0);
+  const totalConsCost    = consAgg.reduce((s, i) => s + (i.total_cost || 0), 0);
+  const top5Consumption  = [...consAgg].sort((a,b) => (b.monthly_cost||0) - (a.monthly_cost||0)).slice(0, 5);
   const wasteByReason    = wasteEntries.reduce((acc, e) => { const k = e.reason_name||'Other'; acc[k]=(acc[k]||0)+1; return acc; }, {});
   const wastePieData     = Object.entries(wasteByReason).map(([name, value]) => ({ name, value }));
   const wasteByDay       = wasteEntries.reduce((acc, e) => { acc[e.date]=(acc[e.date]||0)+1; return acc; }, {});
@@ -383,8 +399,9 @@ const ReportsPage = () => {
     </div>
   );
 
-  const stockChartData = stockStatus.slice(0,10).map(i=>({ name:i.item_name.substring(0,12), current:Math.round(i.current_stock), minimum:Math.round(i.minimum_stock) }));
-  const consChartData  = consumption.slice(0,10).map(i=>({ name:i.item_name.substring(0,12), daily:Math.round(i.average_daily*10)/10 }));
+  // Charts use aggregated data (summed across units when multi-unit)
+  const stockChartData = [...stockAgg].sort((a,b)=>(b.current_stock||0)-(a.current_stock||0)).slice(0,10).map(i=>({ name:i.item_name.substring(0,12), current:Math.round(i.current_stock||0), minimum:Math.round(i.minimum_stock||0) }));
+  const consChartData  = [...consAgg].sort((a,b)=>(b.average_daily||0)-(a.average_daily||0)).slice(0,10).map(i=>({ name:i.item_name.substring(0,12), daily:round2(i.average_daily) }));
 
   const ExportButtons = ({ type, showPdf = true }) => (
     <div className="flex gap-2">
@@ -549,7 +566,7 @@ const ReportsPage = () => {
 
           <div className="flex flex-wrap items-center gap-2 my-2">
             <span className="text-sm font-medium text-slate-500 mr-1">Filter:</span>
-            {[['all','All',stockStatus.length,'slate'],['critical','🔴 Critical',criticalItems.length,'red'],['low','🟡 Low',lowItems.length,'amber'],['ok','🟢 OK',stockStatus.filter(i=>i.status==='ok').length,'emerald']].map(([val,label,count]) => (
+            {[['all','All',stockAgg.length,'slate'],['critical','🔴 Critical',criticalItems.length,'red'],['low','🟡 Low',lowItems.length,'amber'],['ok','🟢 OK',stockAgg.filter(i=>i.status==='ok').length,'emerald']].map(([val,label,count]) => (
               <button key={val} onClick={() => setStockStatusFilter(val)}
                 className={`px-3 py-1 rounded-full text-sm font-medium border transition-all ${stockStatusFilter === val ? 'ring-2 ring-offset-1 ring-slate-400' : ''} bg-slate-100 text-slate-700 hover:bg-slate-200`}>
                 {label} ({count})
@@ -571,9 +588,9 @@ const ReportsPage = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {(stockStatusFilter === 'all' ? stockStatus : stockStatus.filter(i => i.status === stockStatusFilter)).map((item, idx) => (
+                    {(stockStatusFilter === 'all' ? stockAgg : stockAgg.filter(i => i.status === stockStatusFilter)).map((item, idx) => (
                       <tr key={`${item.item_id}-${idx}`}>
-                        {multiUnit && <td className="text-xs font-medium text-blue-700">{item.unit_name}</td>}
+                        {multiUnit && <td className="text-xs font-medium text-blue-700">{item.unit_name || '—'}</td>}
                         <td className="font-medium">{item.item_name}</td>
                         <td className="text-slate-500">{item.section_name}</td>
                         <td className="font-mono">{Math.round(item.current_stock)} {item.unit_of_measure}</td>
@@ -596,8 +613,8 @@ const ReportsPage = () => {
         {/* ══ CONSUMPTION ═══════════════════════════════════════════ */}
         <TabsContent value="consumption" className="mt-6 space-y-6">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard label="Items Tracked"   value={consumption.filter(i=>i.entries_count>0).length} sub="with entries last 30d" color="slate" icon={Package} />
-            <KpiCard label="Top Consumer"    value={consumption[0]?.item_name?.split(' ')[0]||'—'} sub={consumption[0]?`${consumption[0].total_consumption} ${consumption[0].unit_of_measure}`:''} color="blue" icon={TrendingUp} />
+            <KpiCard label="Items Tracked"   value={consAgg.filter(i=>i.entries_count>0).length} sub="with entries last 30d" color="slate" icon={Package} />
+            <KpiCard label="Top Consumer"    value={consAgg[0]?.item_name?.split(' ')[0]||'—'} sub={consAgg[0]?`${consAgg[0].total_consumption} ${consAgg[0].unit_of_measure}`:''} color="blue" icon={TrendingUp} />
             {isAdmin && <>
               <KpiCard label="Total Cost (30d)"   value={fmt(totalConsCost)}  sub="actual consumption cost" color="orange" icon={Download} />
               <KpiCard label="Projected Monthly"  value={fmt(totalMonthCost)} sub="based on daily avg"      color="amber"  icon={TrendingUp} />
@@ -679,9 +696,9 @@ const ReportsPage = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {consumption.map((item, idx) => (
+                    {consAgg.map((item, idx) => (
                       <tr key={`${item.item_id}-${idx}`}>
-                        {multiUnit && <td className="text-xs font-medium text-blue-700">{item.unit_name}</td>}
+                        {multiUnit && <td className="text-xs font-medium text-blue-700">{item.unit_name || 'Combined'}</td>}
                         <td className="font-medium">{item.item_name}</td>
                         <td className="text-slate-500">{item.section_name}</td>
                         <td className="font-mono">{Math.round(item.total_consumption)} {item.unit_of_measure}</td>

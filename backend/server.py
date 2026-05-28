@@ -1743,38 +1743,35 @@ async def get_consumption_report(unit_id: str, days: int = 30, user: dict = Depe
             item_entries[item_id] = []
         item_entries[item_id].append(entry)
     
+    # Only include items that have actual stock entries in THIS unit.
+    # visible_in_units controls the UI dropdown only — NOT transaction filtering.
     result = []
-    for item_id, item_data in items.items():
-        entries = item_entries.get(item_id, [])
+    for item_id, unit_entries in item_entries.items():
+        item_data = items.get(item_id)
+        if not item_data:
+            continue
         total_consumption = 0
         days_count = 0
-        
-        for i in range(1, len(entries)):
-            diff = entries[i-1]["quantity"] - entries[i]["quantity"]
+        for i in range(1, len(unit_entries)):
+            diff = unit_entries[i-1]["quantity"] - unit_entries[i]["quantity"]
             if diff > 0:
                 total_consumption += diff
                 days_count += 1
-        
         avg_daily = total_consumption / days_count if days_count > 0 else 0
-        
-        # Skip items not visible in this unit
-        visible_units = item_data.get("visible_in_units", [])
-        if visible_units and unit_id not in visible_units:
-            continue
         price = item_data.get("price", 0) or 0
         result.append({
             "item_id": item_id,
             "item_name": item_data["name"],
-            "section_name": sections.get(item_data["section_id"], ""),
+            "section_name": sections.get(item_data.get("section_id", ""), ""),
             "unit_of_measure": item_data["unit_of_measure"],
             "total_consumption": round(total_consumption, 2),
             "average_daily": round(avg_daily, 2),
-            "entries_count": len(entries),
+            "entries_count": len(unit_entries),
             "price": price,
             "total_cost": round(total_consumption * price, 2),
             "monthly_cost": round(avg_daily * 30 * price, 2)
         })
-    
+
     result.sort(key=lambda x: x["total_consumption"], reverse=True)
     return result
 
