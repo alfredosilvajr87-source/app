@@ -21,6 +21,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.units import inch
 from io import BytesIO
 import base64
+import xlsxwriter
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -1962,6 +1963,573 @@ async def get_orders_history_pdf(
         "share_title": f"Orders History - {company['name'] if company else 'Company'}",
         "share_text": f"Orders for {unit['name'] if unit else 'Unit'} - Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}"
     }
+
+# ==================== EXCEL REPORTS ====================
+
+def _excel_colors():
+    return {
+        'primary':      '#1e293b',
+        'primary_med':  '#334155',
+        'accent':       '#3b82f6',
+        'accent_soft':  '#dbeafe',
+        'success':      '#10b981',
+        'success_soft': '#d1fae5',
+        'warning':      '#f59e0b',
+        'warning_soft': '#fef3c7',
+        'danger':       '#ef4444',
+        'danger_soft':  '#fee2e2',
+        'surface':      '#ffffff',
+        'border':       '#e2e8f0',
+        'text':         '#0f172a',
+        'muted':        '#64748b',
+        'row_alt':      '#f1f5f9',
+    }
+
+def _add_excel_formats(wb, C):
+    """Return a dict of named xlsxwriter formats."""
+    return {
+        'title': wb.add_format({'bold': True, 'font_size': 20, 'font_color': C['primary'], 'border': 0}),
+        'subtitle': wb.add_format({'font_size': 11, 'font_color': C['muted'], 'border': 0}),
+        'header': wb.add_format({
+            'bold': True, 'font_size': 10, 'bg_color': C['primary'], 'font_color': C['surface'],
+            'border': 1, 'border_color': C['primary_med'], 'align': 'center', 'valign': 'vcenter',
+        }),
+        'row_even': wb.add_format({
+            'font_size': 10, 'bg_color': C['surface'], 'font_color': C['text'],
+            'border': 1, 'border_color': C['border'], 'valign': 'vcenter',
+        }),
+        'row_odd': wb.add_format({
+            'font_size': 10, 'bg_color': C['row_alt'], 'font_color': C['text'],
+            'border': 1, 'border_color': C['border'], 'valign': 'vcenter',
+        }),
+        'row_even_num': wb.add_format({
+            'font_size': 10, 'bg_color': C['surface'], 'font_color': C['text'],
+            'border': 1, 'border_color': C['border'], 'valign': 'vcenter',
+            'num_format': '#,##0.00', 'align': 'right',
+        }),
+        'row_odd_num': wb.add_format({
+            'font_size': 10, 'bg_color': C['row_alt'], 'font_color': C['text'],
+            'border': 1, 'border_color': C['border'], 'valign': 'vcenter',
+            'num_format': '#,##0.00', 'align': 'right',
+        }),
+        'total': wb.add_format({
+            'bold': True, 'font_size': 10, 'bg_color': C['accent_soft'], 'font_color': C['primary'],
+            'border': 1, 'border_color': C['border'], 'top': 2, 'top_color': C['accent'],
+        }),
+        'total_num': wb.add_format({
+            'bold': True, 'font_size': 10, 'bg_color': C['accent_soft'], 'font_color': C['primary'],
+            'border': 1, 'border_color': C['border'], 'top': 2, 'top_color': C['accent'],
+            'num_format': '#,##0.00', 'align': 'right',
+        }),
+        'kpi_label': wb.add_format({
+            'font_size': 9, 'font_color': C['muted'], 'bg_color': C['surface'], 'border': 0,
+            'align': 'center', 'valign': 'bottom', 'top': 3, 'top_color': C['accent'],
+        }),
+        'kpi_value': wb.add_format({
+            'bold': True, 'font_size': 24, 'font_color': C['accent'],
+            'bg_color': C['surface'], 'border': 0, 'align': 'center', 'valign': 'vcenter',
+        }),
+        'kpi_value_danger': wb.add_format({
+            'bold': True, 'font_size': 24, 'font_color': C['danger'],
+            'bg_color': C['surface'], 'border': 0, 'align': 'center', 'valign': 'vcenter',
+        }),
+        'kpi_value_warning': wb.add_format({
+            'bold': True, 'font_size': 24, 'font_color': C['warning'],
+            'bg_color': C['surface'], 'border': 0, 'align': 'center', 'valign': 'vcenter',
+        }),
+        'kpi_value_success': wb.add_format({
+            'bold': True, 'font_size': 24, 'font_color': C['success'],
+            'bg_color': C['surface'], 'border': 0, 'align': 'center', 'valign': 'vcenter',
+        }),
+        'kpi_trend': wb.add_format({
+            'font_size': 9, 'font_color': C['muted'], 'bg_color': C['surface'],
+            'border': 0, 'align': 'center', 'valign': 'top',
+        }),
+        'cond_danger': wb.add_format({'bg_color': C['danger_soft'], 'font_color': C['danger'], 'bold': True, 'border': 1, 'border_color': C['border']}),
+        'cond_warning': wb.add_format({'bg_color': C['warning_soft'], 'font_color': C['warning'], 'bold': True, 'border': 1, 'border_color': C['border']}),
+        'cond_success': wb.add_format({'bg_color': C['success_soft'], 'font_color': C['success'], 'bold': True, 'border': 1, 'border_color': C['border']}),
+        'section_header': wb.add_format({
+            'bold': True, 'font_size': 11, 'font_color': C['primary_med'], 'border': 0,
+        }),
+        'bullet': wb.add_format({'font_size': 10, 'font_color': C['text'], 'border': 0, 'indent': 1}),
+    }
+
+def _write_dashboard_header(ws, wb, fmts, C, title, subtitle, generated):
+    ws.hide_gridlines(2)
+    ws.set_row(0, 45)
+    ws.set_row(1, 22)
+    ws.set_row(2, 18)
+    ws.set_column('A:A', 1)
+    ws.merge_range('B1:O1', title, fmts['title'])
+    ws.merge_range('B2:O2', subtitle, fmts['subtitle'])
+    ws.write('P1', generated, wb.add_format({'font_size': 8, 'font_color': C['muted'], 'align': 'right', 'border': 0}))
+
+def _write_kpi_card(ws, fmts, label, value, trend, row, col_s, col_e, value_fmt_key='kpi_value'):
+    ws.merge_range(row,     col_s, row,     col_e, label, fmts['kpi_label'])
+    ws.merge_range(row + 1, col_s, row + 4, col_e, value, fmts[value_fmt_key])
+    ws.merge_range(row + 5, col_s, row + 6, col_e, trend, fmts['kpi_trend'])
+    for r in range(row, row + 7):
+        ws.set_row(r, 18 if r != row + 1 else 30)
+
+def _write_table(ws, wb, fmts, headers, rows, col_types=None, start_row=0, add_total_cols=None):
+    """Write a styled table. col_types: list of 'text'|'num' per column."""
+    if col_types is None:
+        col_types = ['text'] * len(headers)
+    ws.set_row(start_row, 30)
+    for ci, h in enumerate(headers):
+        ws.write(start_row, ci, h, fmts['header'])
+
+    totals = {ci: 0.0 for ci in (add_total_cols or [])}
+    for ri, row in enumerate(rows):
+        ws.set_row(start_row + 1 + ri, 20)
+        for ci, val in enumerate(row):
+            is_num = col_types[ci] == 'num'
+            fmt_key = ('row_even_num' if ri % 2 == 0 else 'row_odd_num') if is_num else ('row_even' if ri % 2 == 0 else 'row_odd')
+            if is_num:
+                v = float(val or 0)
+                ws.write_number(start_row + 1 + ri, ci, v, fmts[fmt_key])
+                if ci in totals:
+                    totals[ci] += v
+            else:
+                ws.write(start_row + 1 + ri, ci, val or '', fmts[fmt_key])
+
+    if add_total_cols and rows:
+        total_row = start_row + 1 + len(rows)
+        ws.set_row(total_row, 22)
+        for ci in range(len(headers)):
+            if ci in totals:
+                ws.write_number(total_row, ci, round(totals[ci], 2), fmts['total_num'])
+            elif ci == 0:
+                ws.write(total_row, ci, 'TOTAL', fmts['total'])
+            else:
+                ws.write(total_row, ci, '', fmts['total'])
+
+    # Auto-fit columns
+    for ci, h in enumerate(headers):
+        max_len = len(str(h))
+        for row in rows:
+            max_len = max(max_len, len(str(row[ci] or '')))
+        ws.set_column(ci, ci, min(max(max_len + 2, 10), 45))
+    ws.freeze_panes(start_row + 1, 0)
+
+def _add_bar_chart(wb, ws_target, ws_data_name, title, row_s, row_e, col_cat, col_val,
+                   insert_cell, C, color=None, width=560, height=300):
+    chart = wb.add_chart({'type': 'bar'})
+    chart.set_title({'name': title, 'name_font': {'size': 11, 'color': C['primary'], 'bold': True}})
+    chart.add_series({
+        'categories': [ws_data_name, row_s, col_cat, row_e, col_cat],
+        'values':     [ws_data_name, row_s, col_val, row_e, col_val],
+        'fill':   {'color': color or C['accent']},
+        'border': {'none': True},
+        'gap': 60,
+    })
+    chart.set_chartarea({'border': {'none': True}, 'fill': {'color': C['surface']}})
+    chart.set_plotarea({'border': {'none': True}, 'fill': {'color': C['surface']}})
+    chart.set_legend({'none': True})
+    chart.set_size({'width': width, 'height': height})
+    chart.set_x_axis({'line': {'color': C['border']}})
+    chart.set_y_axis({'major_gridlines': {'visible': True, 'line': {'color': C['row_alt']}}, 'line': {'color': C['border']}})
+    ws_target.insert_chart(insert_cell, chart, {'x_offset': 5, 'y_offset': 5})
+
+
+# ── Stock Status Excel ──────────────────────────────────────────────────────
+
+@api_router.get("/reports/stock-status/{unit_id}/excel")
+async def get_stock_excel(unit_id: str, user: dict = Depends(get_current_user)):
+    data = await get_stock_status_report(unit_id, user)
+    company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
+    unit = await db.units.find_one({"id": unit_id}, {"_id": 0})
+    unit_name = unit["name"] if unit else "Unit"
+    company_name = company["name"] if company else "Company"
+    now_str = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M")
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    C = _excel_colors()
+    buf = BytesIO()
+    wb = xlsxwriter.Workbook(buf, {'in_memory': True})
+    fmts = _add_excel_formats(wb, C)
+
+    critical = [i for i in data if i['status'] == 'critical']
+    low      = [i for i in data if i['status'] == 'low']
+    ok       = [i for i in data if i['status'] == 'ok']
+
+    # ── Sheet: Dashboard ──
+    ws_dash = wb.add_worksheet('📊 Dashboard')
+    ws_dash.set_tab_color(C['primary'])
+    _write_dashboard_header(ws_dash, wb, fmts, C,
+        f'Stock Status Report — {unit_name}',
+        f'{company_name}  ·  All Sections',
+        f'Generated: {now_str}')
+
+    # KPI cards (row index 4 = row 5 in Excel)
+    _write_kpi_card(ws_dash, fmts, 'TOTAL ITEMS', len(data), f'{len(data)} tracked items', 4, 1, 4)
+    _write_kpi_card(ws_dash, fmts, 'CRITICAL', len(critical), 'Below 50% of minimum', 4, 6, 9, 'kpi_value_danger')
+    _write_kpi_card(ws_dash, fmts, 'LOW STOCK', len(low), 'Below minimum', 4, 11, 14, 'kpi_value_warning')
+    _write_kpi_card(ws_dash, fmts, 'OK', len(ok), 'Sufficient stock', 4, 16, 19, 'kpi_value_success')
+    ws_dash.set_column('A:A', 1)
+
+    # Hidden data for chart (row 14+)
+    by_section = {}
+    for i in data:
+        s = i['section_name'] or 'Other'
+        by_section.setdefault(s, {'critical': 0, 'low': 0, 'ok': 0})
+        by_section[s][i['status']] += 1
+    sections_list = sorted(by_section.keys())
+    chart_start_row = 14
+    ws_dash.write(chart_start_row - 1, 22, 'Section', fmts['header'])
+    ws_dash.write(chart_start_row - 1, 23, 'Critical', fmts['header'])
+    ws_dash.write(chart_start_row - 1, 24, 'Low', fmts['header'])
+    for ri, sec in enumerate(sections_list):
+        ws_dash.write(chart_start_row + ri, 22, sec)
+        ws_dash.write(chart_start_row + ri, 23, by_section[sec]['critical'])
+        ws_dash.write(chart_start_row + ri, 24, by_section[sec]['low'])
+    ws_dash.set_column('W:Y', 0)  # hide chart data columns
+
+    # Bar chart: critical by section
+    if sections_list:
+        _add_bar_chart(wb, ws_dash, '📊 Dashboard', 'Critical Items by Section',
+                       chart_start_row, chart_start_row + len(sections_list) - 1,
+                       22, 23, 'B13', C, color=C['danger'], width=520, height=280)
+
+    # ── Sheet: All Items ──
+    ws_all = wb.add_worksheet('📋 All Items')
+    ws_all.set_tab_color(C['accent'])
+    ws_all.merge_range('A1:H1', f'All Items — {unit_name}', fmts['title'])
+    ws_all.set_row(0, 32)
+    _write_table(ws_all, wb, fmts,
+        ['Item', 'Section', 'UoM', 'Current Stock', 'Minimum Stock', 'Status', 'Last Entry', 'Avg Consumption'],
+        [[i['item_name'], i['section_name'], i['unit_of_measure'],
+          i['current_stock'], i['minimum_stock'], i['status'].upper(),
+          i['last_entry_date'] or '—', i['average_consumption']] for i in data],
+        ['text','text','text','num','num','text','text','num'],
+        start_row=1)
+    # Conditional formatting on Status column (index 5, col F = 7 in 0-based after start_row)
+    last_data_row = 1 + len(data)
+    ws_all.conditional_format(2, 5, last_data_row, 5, {'type':'text','criteria':'containing','value':'CRITICAL','format': fmts['cond_danger']})
+    ws_all.conditional_format(2, 5, last_data_row, 5, {'type':'text','criteria':'containing','value':'LOW','format': fmts['cond_warning']})
+    ws_all.conditional_format(2, 5, last_data_row, 5, {'type':'text','criteria':'containing','value':'OK','format': fmts['cond_success']})
+
+    # ── Sheet: Critical ──
+    if critical:
+        ws_crit = wb.add_worksheet('🔴 Critical')
+        ws_crit.set_tab_color(C['danger'])
+        ws_crit.merge_range('A1:F1', f'Critical Items — {unit_name}', fmts['title'])
+        ws_crit.set_row(0, 32)
+        _write_table(ws_crit, wb, fmts,
+            ['Item', 'Section', 'UoM', 'Current Stock', 'Minimum Stock', 'Gap'],
+            [[i['item_name'], i['section_name'], i['unit_of_measure'],
+              i['current_stock'], i['minimum_stock'],
+              round(i['minimum_stock'] - i['current_stock'], 2)] for i in critical],
+            ['text','text','text','num','num','num'],
+            start_row=1, add_total_cols={3, 4, 5})
+
+    # ── Sheet: By Section ──
+    ws_sec = wb.add_worksheet('📂 By Section')
+    ws_sec.set_tab_color(C['primary_med'])
+    ws_sec.merge_range('A1:E1', f'Stock by Section — {unit_name}', fmts['title'])
+    ws_sec.set_row(0, 32)
+    section_summary = {}
+    for i in data:
+        s = i['section_name'] or 'Other'
+        if s not in section_summary:
+            section_summary[s] = {'items': 0, 'critical': 0, 'low': 0, 'ok': 0}
+        section_summary[s]['items'] += 1
+        section_summary[s][i['status']] += 1
+    _write_table(ws_sec, wb, fmts,
+        ['Section', 'Total Items', 'Critical', 'Low Stock', 'OK'],
+        [[s, v['items'], v['critical'], v['low'], v['ok']] for s, v in sorted(section_summary.items())],
+        ['text','num','num','num','num'],
+        start_row=1)
+
+    wb.close()
+    buf.seek(0)
+    return {
+        "excel_base64": base64.b64encode(buf.read()).decode(),
+        "filename": f"stock_{unit_name.replace(' ','_')}_{date_str}.xlsx"
+    }
+
+
+# ── Consumption Excel ───────────────────────────────────────────────────────
+
+@api_router.get("/reports/consumption/{unit_id}/excel")
+async def get_consumption_excel(unit_id: str, days: int = 30, user: dict = Depends(get_current_user)):
+    data = await get_consumption_report(unit_id, days, user)
+    company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
+    unit = await db.units.find_one({"id": unit_id}, {"_id": 0})
+    unit_name = unit["name"] if unit else "Unit"
+    company_name = company["name"] if company else "Company"
+    now_str = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M")
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    C = _excel_colors()
+    buf = BytesIO()
+    wb = xlsxwriter.Workbook(buf, {'in_memory': True})
+    fmts = _add_excel_formats(wb, C)
+
+    total_cost = sum(i.get('total_cost', 0) for i in data)
+    total_monthly = sum(i.get('monthly_cost', 0) for i in data)
+    top_item = data[0]['item_name'] if data else '—'
+
+    # ── Dashboard ──
+    ws_dash = wb.add_worksheet('📊 Dashboard')
+    ws_dash.set_tab_color(C['primary'])
+    _write_dashboard_header(ws_dash, wb, fmts, C,
+        f'Consumption Report — {unit_name}',
+        f'{company_name}  ·  Last {days} days',
+        f'Generated: {now_str}')
+
+    _write_kpi_card(ws_dash, fmts, 'ITEMS TRACKED', len(data), f'{days}-day window', 4, 1, 4)
+    _write_kpi_card(ws_dash, fmts, 'TOTAL COST (€)', f'€{total_cost:,.2f}', f'Last {days} days', 4, 6, 9, 'kpi_value_danger')
+    _write_kpi_card(ws_dash, fmts, 'MONTHLY EST. (€)', f'€{total_monthly:,.2f}', 'Projected', 4, 11, 14, 'kpi_value_warning')
+    _write_kpi_card(ws_dash, fmts, 'TOP CONSUMER', top_item[:18], 'Highest total', 4, 16, 19)
+    ws_dash.set_column('A:A', 1)
+
+    # Chart data (top 10 by total consumption)
+    top10 = data[:10]
+    chart_start = 14
+    ws_dash.set_column('W:Y', 0)
+    for ri, item in enumerate(top10):
+        ws_dash.write(chart_start + ri, 22, item['item_name'][:20])
+        ws_dash.write(chart_start + ri, 23, item['total_consumption'])
+    if top10:
+        _add_bar_chart(wb, ws_dash, '📊 Dashboard', 'Top 10 Items by Consumption',
+                       chart_start, chart_start + len(top10) - 1, 22, 23, 'B13', C,
+                       color=C['accent'], width=520, height=280)
+
+    # ── Consumption Data ──
+    ws_data = wb.add_worksheet('📋 Consumption')
+    ws_data.set_tab_color(C['accent'])
+    ws_data.merge_range('A1:I1', f'Consumption Detail — {unit_name} — Last {days} days', fmts['title'])
+    ws_data.set_row(0, 32)
+    _write_table(ws_data, wb, fmts,
+        ['Item', 'Section', 'UoM', 'Total (30d)', 'Daily Avg', 'Entries', 'Price (€)', 'Total Cost (€)', 'Monthly Est. (€)'],
+        [[i['item_name'], i['section_name'], i['unit_of_measure'],
+          i['total_consumption'], i['average_daily'], i['entries_count'],
+          i.get('price', 0), i.get('total_cost', 0), i.get('monthly_cost', 0)] for i in data],
+        ['text','text','text','num','num','num','num','num','num'],
+        start_row=1, add_total_cols={3, 7, 8})
+
+    # ── By Section ──
+    ws_sec = wb.add_worksheet('📂 By Section')
+    ws_sec.set_tab_color(C['primary_med'])
+    ws_sec.merge_range('A1:D1', f'Consumption by Section — Last {days} days', fmts['title'])
+    ws_sec.set_row(0, 32)
+    by_sec = {}
+    for i in data:
+        s = i['section_name'] or 'Other'
+        by_sec.setdefault(s, {'items': 0, 'total_cost': 0.0, 'monthly_cost': 0.0})
+        by_sec[s]['items'] += 1
+        by_sec[s]['total_cost'] += i.get('total_cost', 0)
+        by_sec[s]['monthly_cost'] += i.get('monthly_cost', 0)
+    _write_table(ws_sec, wb, fmts,
+        ['Section', 'Items', 'Total Cost (€)', 'Monthly Est. (€)'],
+        [[s, v['items'], round(v['total_cost'], 2), round(v['monthly_cost'], 2)] for s, v in sorted(by_sec.items())],
+        ['text','num','num','num'],
+        start_row=1, add_total_cols={1, 2, 3})
+
+    wb.close()
+    buf.seek(0)
+    return {
+        "excel_base64": base64.b64encode(buf.read()).decode(),
+        "filename": f"consumption_{unit_name.replace(' ','_')}_{date_str}.xlsx"
+    }
+
+
+# ── Orders History Excel ────────────────────────────────────────────────────
+
+@api_router.get("/reports/orders-history/{unit_id}/excel")
+async def get_orders_excel(unit_id: str, start_date: Optional[str] = None,
+                           end_date: Optional[str] = None, user: dict = Depends(get_current_user)):
+    report = await get_orders_history(unit_id, start_date, end_date, user)
+    orders = report['orders']
+    summary = report['summary']
+    company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
+    unit = await db.units.find_one({"id": unit_id}, {"_id": 0})
+    unit_name = unit["name"] if unit else "Unit"
+    company_name = company["name"] if company else "Company"
+    now_str = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M")
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    period = f"{start_date or '—'} → {end_date or date_str}"
+
+    C = _excel_colors()
+    buf = BytesIO()
+    wb = xlsxwriter.Workbook(buf, {'in_memory': True})
+    fmts = _add_excel_formats(wb, C)
+
+    # ── Dashboard ──
+    ws_dash = wb.add_worksheet('📊 Dashboard')
+    ws_dash.set_tab_color(C['primary'])
+    _write_dashboard_header(ws_dash, wb, fmts, C,
+        f'Orders Report — {unit_name}',
+        f'{company_name}  ·  {period}',
+        f'Generated: {now_str}')
+
+    _write_kpi_card(ws_dash, fmts, 'TOTAL ORDERS', summary['total'], period, 4, 1, 4)
+    _write_kpi_card(ws_dash, fmts, 'PENDING', summary['pending'], 'Awaiting delivery', 4, 6, 9, 'kpi_value_warning')
+    _write_kpi_card(ws_dash, fmts, 'COMPLETED', summary['completed'], 'Delivered', 4, 11, 14, 'kpi_value_success')
+    ws_dash.set_column('A:A', 1)
+
+    # ── Orders List ──
+    ws_orders = wb.add_worksheet('📋 Orders')
+    ws_orders.set_tab_color(C['accent'])
+    ws_orders.merge_range('A1:F1', f'Order History — {unit_name}', fmts['title'])
+    ws_orders.set_row(0, 32)
+    _write_table(ws_orders, wb, fmts,
+        ['Order #', 'Target Date', 'Items Count', 'Status', 'Created By', 'Created At'],
+        [[o.get('order_number',''), o.get('target_date',''),
+          len(o.get('items', [])), o.get('status','').upper(),
+          o.get('created_by_name',''), (o.get('created_at','')[:10] if o.get('created_at') else '')] for o in orders],
+        ['text','text','num','text','text','text'],
+        start_row=1)
+
+    # ── Items Detail ──
+    ws_items = wb.add_worksheet('📦 Items Detail')
+    ws_items.set_tab_color(C['primary_med'])
+    ws_items.merge_range('A1:F1', 'All Order Items', fmts['title'])
+    ws_items.set_row(0, 32)
+    all_items_rows = []
+    for o in orders:
+        for item in o.get('items', []):
+            all_items_rows.append([
+                o.get('order_number',''), o.get('target_date',''),
+                item.get('item_name',''), item.get('section_name',''),
+                item.get('adjusted_quantity', 0), item.get('unit_of_measure','')
+            ])
+    _write_table(ws_items, wb, fmts,
+        ['Order #', 'Target Date', 'Item', 'Section', 'Quantity', 'UoM'],
+        all_items_rows,
+        ['text','text','text','text','num','text'],
+        start_row=1, add_total_cols={4})
+
+    wb.close()
+    buf.seek(0)
+    return {
+        "excel_base64": base64.b64encode(buf.read()).decode(),
+        "filename": f"orders_{unit_name.replace(' ','_')}_{date_str}.xlsx"
+    }
+
+
+# ── Waste Excel ─────────────────────────────────────────────────────────────
+
+@api_router.get("/reports/waste/{unit_id}/excel")
+async def get_waste_excel(unit_id: str, days: int = 30, user: dict = Depends(get_current_user)):
+    # Fetch waste entries for this unit
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+    query = {"unit_id": unit_id, "company_id": user["company_id"], "date": {"$gte": since}}
+    entries_raw = await db.waste_entries.find(query, {"_id": 0}).sort("date", -1).to_list(5000)
+
+    company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
+    unit = await db.units.find_one({"id": unit_id}, {"_id": 0})
+    unit_name = unit["name"] if unit else "Unit"
+    company_name = company["name"] if company else "Company"
+    now_str = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M")
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    # Enrich entries with item prices
+    items = {i["id"]: i for i in await db.items.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(1000)}
+    entries = []
+    for e in entries_raw:
+        item = items.get(e.get('item_id', ''), {})
+        price = e.get('item_price') or item.get('price', 0) or 0
+        qty = e.get('quantity', 0)
+        cost = e.get('estimated_cost') or round(qty * price, 2)
+        entries.append({**e, 'estimated_cost': cost, 'price': price})
+
+    total_events = len(entries)
+    total_cost = sum(e['estimated_cost'] for e in entries)
+
+    # Aggregations
+    by_reason = {}
+    for e in entries:
+        r = e.get('reason_name') or 'Other'
+        by_reason.setdefault(r, {'events': 0, 'cost': 0.0})
+        by_reason[r]['events'] += 1
+        by_reason[r]['cost'] += e['estimated_cost']
+
+    by_item = {}
+    for e in entries:
+        n = e.get('item_name') or '—'
+        by_item.setdefault(n, {'unit': e.get('unit_of_measure',''), 'events': 0, 'qty': 0.0, 'cost': 0.0})
+        by_item[n]['events'] += 1
+        by_item[n]['qty'] += e.get('quantity', 0)
+        by_item[n]['cost'] += e['estimated_cost']
+
+    top_reason = max(by_reason, key=lambda r: by_reason[r]['events']) if by_reason else '—'
+
+    C = _excel_colors()
+    buf = BytesIO()
+    wb = xlsxwriter.Workbook(buf, {'in_memory': True})
+    fmts = _add_excel_formats(wb, C)
+
+    # ── Dashboard ──
+    ws_dash = wb.add_worksheet('📊 Dashboard')
+    ws_dash.set_tab_color(C['primary'])
+    _write_dashboard_header(ws_dash, wb, fmts, C,
+        f'Waste Report — {unit_name}',
+        f'{company_name}  ·  Last {days} days',
+        f'Generated: {now_str}')
+
+    _write_kpi_card(ws_dash, fmts, 'WASTE EVENTS', total_events, f'Last {days} days', 4, 1, 4, 'kpi_value_danger')
+    _write_kpi_card(ws_dash, fmts, 'TOTAL COST (€)', f'€{total_cost:,.2f}', 'Estimated loss', 4, 6, 9, 'kpi_value_warning')
+    _write_kpi_card(ws_dash, fmts, 'TOP REASON', top_reason[:18], 'Most frequent', 4, 11, 14)
+    _write_kpi_card(ws_dash, fmts, 'ITEMS WASTED', len(by_item), 'Unique items', 4, 16, 19, 'kpi_value_danger')
+    ws_dash.set_column('A:A', 1)
+
+    # Chart: by reason
+    reasons_sorted = sorted(by_reason.items(), key=lambda x: x[1]['events'], reverse=True)[:8]
+    chart_start = 14
+    ws_dash.set_column('W:Y', 0)
+    for ri, (reason, rv) in enumerate(reasons_sorted):
+        ws_dash.write(chart_start + ri, 22, reason[:20])
+        ws_dash.write(chart_start + ri, 23, rv['events'])
+    if reasons_sorted:
+        _add_bar_chart(wb, ws_dash, '📊 Dashboard', 'Waste Events by Reason',
+                       chart_start, chart_start + len(reasons_sorted) - 1, 22, 23, 'B13', C,
+                       color=C['warning'], width=520, height=280)
+
+    # ── Waste Detail ──
+    ws_detail = wb.add_worksheet('📋 Waste Detail')
+    ws_detail.set_tab_color(C['accent'])
+    ws_detail.merge_range('A1:H1', f'Waste Entries — {unit_name} — Last {days} days', fmts['title'])
+    ws_detail.set_row(0, 32)
+    _write_table(ws_detail, wb, fmts,
+        ['Date', 'Item', 'Quantity', 'UoM', 'Reason', 'Initials', 'Est. Cost (€)', 'Notes'],
+        [[e.get('date',''), e.get('item_name',''), e.get('quantity', 0),
+          e.get('unit_of_measure',''), e.get('reason_name',''), e.get('initials',''),
+          e['estimated_cost'], e.get('notes','')]  for e in entries],
+        ['text','text','num','text','text','text','num','text'],
+        start_row=1, add_total_cols={2, 6})
+
+    # ── By Reason ──
+    ws_reason = wb.add_worksheet('📂 By Reason')
+    ws_reason.set_tab_color(C['warning'])
+    ws_reason.merge_range('A1:C1', 'Waste by Reason', fmts['title'])
+    ws_reason.set_row(0, 32)
+    _write_table(ws_reason, wb, fmts,
+        ['Reason', 'Events', 'Est. Cost (€)'],
+        [[r, v['events'], round(v['cost'], 2)] for r, v in sorted(by_reason.items(), key=lambda x: -x[1]['events'])],
+        ['text','num','num'],
+        start_row=1, add_total_cols={1, 2})
+
+    # ── By Item ──
+    ws_item = wb.add_worksheet('📂 By Item')
+    ws_item.set_tab_color(C['danger'])
+    ws_item.merge_range('A1:E1', 'Waste by Item', fmts['title'])
+    ws_item.set_row(0, 32)
+    _write_table(ws_item, wb, fmts,
+        ['Item', 'UoM', 'Events', 'Total Qty', 'Est. Cost (€)'],
+        [[n, v['unit'], v['events'], round(v['qty'], 2), round(v['cost'], 2)]
+         for n, v in sorted(by_item.items(), key=lambda x: -x[1]['cost'])],
+        ['text','text','num','num','num'],
+        start_row=1, add_total_cols={2, 3, 4})
+
+    wb.close()
+    buf.seek(0)
+    return {
+        "excel_base64": base64.b64encode(buf.read()).decode(),
+        "filename": f"waste_{unit_name.replace(' ','_')}_{date_str}.xlsx"
+    }
+
 
 # ==================== SETTINGS ====================
 
