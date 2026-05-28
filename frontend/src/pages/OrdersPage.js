@@ -33,7 +33,6 @@ import { format } from 'date-fns';
 import {
   ShoppingCart,
   CalendarIcon,
-  Download,
   Share2,
   Trash2,
   FileText,
@@ -59,6 +58,11 @@ const OrdersPage = () => {
   const [orderNotes, setOrderNotes] = useState('');
   const [editedQuantities, setEditedQuantities] = useState({});
   const [amendItems, setAmendItems] = useState([]);
+  const [orderSuccessOpen, setOrderSuccessOpen] = useState(false);
+  const [submittedItems, setSubmittedItems] = useState([]);
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
+  const [pdfData, setPdfData] = useState(null); // { base64, filename }
+  const [loadingPdf, setLoadingPdf] = useState(false);
 
   useEffect(() => {
     if (currentUnit) {
@@ -126,11 +130,13 @@ const OrdersPage = () => {
         notes: orderNotes
       });
 
-      toast.success('Order created successfully');
+      // Store items for confirmation popup
+      setSubmittedItems(items);
       setPreviewOpen(false);
       setCalculatedOrder(null);
       setOrderNotes('');
       fetchOrders();
+      setOrderSuccessOpen(true);
     } catch (err) {
       toast.error('Failed to create order');
     } finally {
@@ -138,17 +144,25 @@ const OrdersPage = () => {
     }
   };
 
-  const downloadPdf = async (orderId) => {
+  const openPdfViewer = async (orderId) => {
+    setLoadingPdf(true);
     try {
       const res = await axios.get(`${API}/orders/${orderId}/pdf`);
-      const link = document.createElement('a');
-      link.href = `data:application/pdf;base64,${res.data.pdf_base64}`;
-      link.download = res.data.filename;
-      link.click();
-      toast.success('PDF downloaded');
+      setPdfData({ base64: res.data.pdf_base64, filename: res.data.filename });
+      setPdfViewerOpen(true);
     } catch (err) {
-      toast.error('Failed to download PDF');
+      toast.error('Failed to load PDF');
+    } finally {
+      setLoadingPdf(false);
     }
+  };
+
+  const downloadCurrentPdf = () => {
+    if (!pdfData) return;
+    const link = document.createElement('a');
+    link.href = `data:application/pdf;base64,${pdfData.base64}`;
+    link.download = pdfData.filename;
+    link.click();
   };
 
   const sharePdf = async (orderId) => {
@@ -375,11 +389,12 @@ const OrdersPage = () => {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => downloadPdf(order.id)}
+                          onClick={() => openPdfViewer(order.id)}
+                          disabled={loadingPdf}
                           data-testid={`download-pdf-${order.id}`}
                         >
-                          <Download className="h-4 w-4 mr-1" />
-                          PDF
+                          <FileText className="h-4 w-4 mr-1" />
+                          {loadingPdf ? '...' : 'PDF'}
                         </Button>
                         <Button
                           variant="outline"
@@ -449,11 +464,12 @@ const OrdersPage = () => {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => downloadPdf(order.id)}
+                          onClick={() => openPdfViewer(order.id)}
+                          disabled={loadingPdf}
                           data-testid={`download-pdf-${order.id}`}
                         >
-                          <Download className="h-4 w-4 mr-1" />
-                          PDF
+                          <FileText className="h-4 w-4 mr-1" />
+                          {loadingPdf ? '...' : 'PDF'}
                         </Button>
                         <Button
                           variant="outline"
@@ -636,6 +652,108 @@ const OrdersPage = () => {
             </Button>
             <Button onClick={createAmendment} data-testid="create-amendment-btn">
               Create Amendment Order
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* PDF Viewer Dialog */}
+      <Dialog open={pdfViewerOpen} onOpenChange={(open) => { setPdfViewerOpen(open); if (!open) setPdfData(null); }}>
+        <DialogContent className="max-w-2xl w-full p-0 overflow-hidden">
+          <DialogHeader className="px-4 pt-4 pb-2">
+            <DialogTitle className="font-heading flex items-center gap-2">
+              <FileText className="h-4 w-4" /> Order PDF
+            </DialogTitle>
+            <DialogDescription>
+              Review your order below
+            </DialogDescription>
+          </DialogHeader>
+
+          {pdfData && (
+            <>
+              {/* Inline PDF viewer */}
+              <div className="w-full" style={{ height: '65vh' }}>
+                <iframe
+                  src={`data:application/pdf;base64,${pdfData.base64}`}
+                  title="Order PDF"
+                  className="w-full h-full border-0"
+                />
+              </div>
+
+              {/* Fallback message for browsers that block inline PDF */}
+              <div className="px-4 py-2 bg-slate-50 border-t text-xs text-slate-400 text-center">
+                PDF not visible? Use the buttons below to download or share.
+              </div>
+
+              <DialogFooter className="px-4 pb-4 pt-2 flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={downloadCurrentPdf}
+                >
+                  ↓ Download
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={() => { setPdfViewerOpen(false); }}
+                >
+                  Close
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Order Success Confirmation */}
+      <Dialog open={orderSuccessOpen} onOpenChange={setOrderSuccessOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-heading flex items-center gap-2">
+              <span className="text-green-600">✓</span> Order Created
+            </DialogTitle>
+            <DialogDescription>
+              Review the items included in this order
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {/* Group by section */}
+            {Object.entries(
+              submittedItems.reduce((acc, item) => {
+                const section = item.section_name || 'Other';
+                if (!acc[section]) acc[section] = [];
+                acc[section].push(item);
+                return acc;
+              }, {})
+            ).map(([section, items]) => (
+              <div key={section}>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">{section}</p>
+                <div className="rounded-lg border border-slate-100 overflow-hidden">
+                  {items.map((item, idx) => (
+                    <div
+                      key={item.item_id}
+                      className={`flex items-center justify-between px-4 py-3 ${idx !== items.length - 1 ? 'border-b border-slate-100' : ''}`}
+                    >
+                      <span className="text-sm font-medium text-slate-800">{item.item_name}</span>
+                      <span className="text-sm font-mono font-semibold text-slate-700">
+                        {item.adjusted_quantity} {item.unit_of_measure}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            <div className="pt-1 border-t border-slate-100 flex justify-between text-xs text-slate-400">
+              <span>{submittedItems.length} items</span>
+              <span>Use PDF or Share to send this order</span>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => setOrderSuccessOpen(false)} className="w-full">
+              Done
             </Button>
           </DialogFooter>
         </DialogContent>
