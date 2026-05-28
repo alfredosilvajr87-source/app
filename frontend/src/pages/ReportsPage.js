@@ -166,12 +166,42 @@ const ReportsPage = () => {
   };
 
   // ── Excel export ─────────────────────────────────────────────────
-  const exportToExcel = (type) => {
-    const wb = XLSX.utils.book_new();
-    const dateStr = format(new Date(), 'yyyy-MM-dd');
+  const exportToExcel = async (type) => {
+    const dateStr   = format(new Date(), 'yyyy-MM-dd');
+    const startStr  = format(dateRange.start, 'yyyy-MM-dd');
+    const endStr    = format(dateRange.end,   'yyyy-MM-dd');
     const unitLabel = multiUnit
       ? selectedUnitIds.map(uid => availableUnits.find(u => u.id === uid)?.initials || '').join('+')
       : (availableUnits.find(u => u.id === selectedUnitIds[0])?.initials || 'unit');
+
+    // ── Single unit: professional styled report from backend ───────
+    if (!multiUnit) {
+      const uid = selectedUnitIds[0];
+      try {
+        let res;
+        if (type === 'stock')
+          res = await axios.get(`${API}/reports/stock-status/${uid}/excel`);
+        else if (type === 'consumption')
+          res = await axios.get(`${API}/reports/consumption/${uid}/excel?days=30`);
+        else if (type === 'orders')
+          res = await axios.get(`${API}/reports/orders-history/${uid}/excel?start_date=${startStr}&end_date=${endStr}`);
+        else if (type === 'waste')
+          res = await axios.get(`${API}/reports/waste/${uid}/excel?days=30`);
+
+        const link = document.createElement('a');
+        link.href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${res.data.excel_base64}`;
+        link.download = res.data.filename;
+        link.click();
+        toast.success('Excel report ready');
+      } catch (err) {
+        console.error(err);
+        toast.error('Failed to generate Excel report');
+      }
+      return;
+    }
+
+    // ── Multi-unit: basic SheetJS export ───────────────────────────
+    const wb = XLSX.utils.book_new();
 
     const addSheet = (rows, sheetName, colWidths, adminOnlyCols = []) => {
       if (!rows.length) return;
@@ -185,127 +215,78 @@ const ReportsPage = () => {
       XLSX.utils.book_append_sheet(wb, ws, sheetName);
     };
 
-    // ── STOCK ──────────────────────────────────────────────────────
     if (type === 'stock') {
       const filtered = stockStatusFilter === 'all' ? stockStatus : stockStatus.filter(i => i.status === stockStatusFilter);
       addSheet(
         filtered.map(i => ({
-          ...(multiUnit ? { 'Unit': i.unit_name } : {}),
-          'Item':            i.item_name,
-          'Section':         i.section_name,
-          'Unit of Measure': i.unit_of_measure,
-          'Current Stock':   i.current_stock,
-          'Minimum Stock':   i.minimum_stock,
-          'Status':          i.status.toUpperCase(),
-          'Last Entry':      i.last_entry_date || '—',
-          'Price (€)':       i.price || 0,
-          'Stock Value (€)': i.stock_value || 0,
-          'To Buy (€)':      i.to_min_value || 0,
+          'Unit': i.unit_name, 'Item': i.item_name, 'Section': i.section_name,
+          'UoM': i.unit_of_measure, 'Current Stock': i.current_stock,
+          'Minimum Stock': i.minimum_stock, 'Status': i.status.toUpperCase(),
+          'Last Entry': i.last_entry_date || '—',
+          'Price (€)': i.price || 0, 'Stock Value (€)': i.stock_value || 0, 'To Buy (€)': i.to_min_value || 0,
         })),
-        'All Items',
-        multiUnit ? [18,30,20,10,14,14,10,14,12,16,12] : [30,20,10,14,14,10,14,12,16,12],
+        'All Items', [18,30,20,10,14,14,10,14,12,16,12],
         ['Price (€)', 'Stock Value (€)', 'To Buy (€)']
       );
       addSheet(
         stockStatus.filter(i => i.status === 'critical').map(i => ({
-          ...(multiUnit ? { 'Unit': i.unit_name } : {}),
-          'Item': i.item_name, 'Section': i.section_name,
+          'Unit': i.unit_name, 'Item': i.item_name, 'Section': i.section_name,
           'Current': i.current_stock, 'Minimum': i.minimum_stock,
           'UoM': i.unit_of_measure, 'To Buy (€)': i.to_min_value || 0,
         })),
-        'Critical Items', multiUnit ? [18,30,20,10,10,8,12] : [30,20,10,10,8,12], ['To Buy (€)']
+        'Critical Items', [18,30,20,10,10,8,12], ['To Buy (€)']
       );
-      if (isAdmin) {
-        const bySection = stockStatus.reduce((acc, i) => {
-          const k = i.section_name || 'Other';
-          if (!acc[k]) acc[k] = { section: k, items: 0, stock_value: 0, to_buy: 0 };
-          acc[k].items++; acc[k].stock_value += i.stock_value || 0; acc[k].to_buy += i.to_min_value || 0;
-          return acc;
-        }, {});
-        addSheet(Object.values(bySection).map(s => ({
-          'Section': s.section, 'Items': s.items,
-          'Stock Value (€)': parseFloat(s.stock_value.toFixed(2)),
-          'To Buy (€)': parseFloat(s.to_buy.toFixed(2)),
-        })), 'By Section (€)', [25,8,16,14]);
-      }
       XLSX.writeFile(wb, `stock_${unitLabel}_${dateStr}.xlsx`);
       toast.success('Excel exported — Stock Status');
     }
-
-    // ── CONSUMPTION ────────────────────────────────────────────────
     else if (type === 'consumption') {
       addSheet(
         consumption.map(i => ({
-          ...(multiUnit ? { 'Unit': i.unit_name } : {}),
-          'Item': i.item_name, 'Section': i.section_name, 'UoM': i.unit_of_measure,
+          'Unit': i.unit_name, 'Item': i.item_name, 'Section': i.section_name, 'UoM': i.unit_of_measure,
           'Total (30d)': i.total_consumption, 'Daily Avg': i.average_daily, 'Entries': i.entries_count,
           'Price (€)': i.price || 0, 'Total Cost (€)': i.total_cost || 0,
           'Daily Cost (€)': i.daily_cost || 0, 'Monthly Est. (€)': i.monthly_cost || 0,
         })),
-        'Consumption',
-        multiUnit ? [18,30,20,8,14,10,8,12,14,14,16] : [30,20,8,14,10,8,12,14,14,16],
+        'Consumption', [18,30,20,8,14,10,8,12,14,14,16],
         ['Price (€)', 'Total Cost (€)', 'Daily Cost (€)', 'Monthly Est. (€)']
       );
-      if (isAdmin) {
-        const bySection = consumption.reduce((acc, i) => {
-          const k = i.section_name || 'Other';
-          if (!acc[k]) acc[k] = { section: k, items: 0, total_cost: 0, monthly_cost: 0 };
-          acc[k].items++; acc[k].total_cost += i.total_cost || 0; acc[k].monthly_cost += i.monthly_cost || 0;
-          return acc;
-        }, {});
-        addSheet(Object.values(bySection).map(s => ({
-          'Section': s.section, 'Items': s.items,
-          'Total Cost (€)': parseFloat(s.total_cost.toFixed(2)),
-          'Monthly Est. (€)': parseFloat(s.monthly_cost.toFixed(2)),
-        })), 'By Section (€)', [25,8,16,16]);
-      }
       XLSX.writeFile(wb, `consumption_${unitLabel}_${dateStr}.xlsx`);
       toast.success('Excel exported — Consumption');
     }
-
-    // ── ORDERS ─────────────────────────────────────────────────────
     else if (type === 'orders') {
       addSheet(
         ordersHistory.orders.map(o => ({
-          ...(multiUnit ? { 'Unit': o.unit_name } : {}),
-          'Order #': o.order_number, 'Target Date': o.target_date,
+          'Unit': o.unit_name, 'Order #': o.order_number, 'Target Date': o.target_date,
           'Items': o.items.length, 'Status': o.status,
           'Created': new Date(o.created_at).toLocaleString(),
         })),
-        'Orders', multiUnit ? [18,16,14,8,12,22] : [16,14,8,12,22]
+        'Orders', [18,16,14,8,12,22]
       );
       addSheet([{
         'Total Orders': ordersHistory.summary.total || 0,
         'Pending': ordersHistory.summary.pending || 0,
         'Completed': ordersHistory.summary.completed || 0,
         'Units': selectedUnitIds.map(uid => unitName(uid)).join(', '),
-        'Period Start': format(dateRange.start, 'yyyy-MM-dd'),
-        'Period End': format(dateRange.end, 'yyyy-MM-dd'),
+        'Period Start': startStr, 'Period End': endStr,
       }], 'Summary', [14,10,12,30,14,12]);
-      XLSX.writeFile(wb, `orders_${unitLabel}_${format(dateRange.start,'yyyy-MM-dd')}_${format(dateRange.end,'yyyy-MM-dd')}.xlsx`);
+      XLSX.writeFile(wb, `orders_${unitLabel}_${startStr}_${endStr}.xlsx`);
       toast.success('Excel exported — Orders');
     }
-
-    // ── WASTE ──────────────────────────────────────────────────────
     else if (type === 'waste') {
       addSheet(
         wasteEntries.map(e => {
-          const item = consumption.find(c => c.item_id === e.item_id && (!multiUnit || c.unit_name === e.unit_name));
+          const item  = consumption.find(c => c.item_id === e.item_id && c.unit_name === e.unit_name);
           const price = e.item_price || item?.price || 0;
-          const cost = e.estimated_cost || (e.quantity * price);
+          const cost  = e.estimated_cost || (e.quantity * price);
           return {
-            ...(multiUnit ? { 'Unit': e.unit_name } : {}),
-            'Date': e.date, 'Item': e.item_name,
+            'Unit': e.unit_name, 'Date': e.date, 'Item': e.item_name,
             'Quantity': e.quantity, 'UoM': e.unit_of_measure,
             'Reason': e.reason_name, 'Initials': e.initials,
-            'Recorded By': e.recorded_by || '—',
             'Est. Cost (€)': price > 0 ? parseFloat(cost.toFixed(2)) : 0,
             'Notes': e.notes || '',
           };
         }),
-        'Waste Detail',
-        multiUnit ? [18,12,30,10,8,16,10,16,14,30] : [12,30,10,8,16,10,16,14,30],
-        ['Est. Cost (€)']
+        'Waste Detail', [18,12,30,10,8,16,10,14,30], ['Est. Cost (€)']
       );
       const byReason = wasteEntries.reduce((acc, e) => {
         const k = e.reason_name || 'Other';
@@ -321,38 +302,6 @@ const ReportsPage = () => {
         })),
         'By Reason', [20,10,14], ['Est. Cost (€)']
       );
-      if (isAdmin && multiUnit) {
-        const byUnit = wasteEntries.reduce((acc, e) => {
-          const k = e.unit_name || 'Other';
-          if (!acc[k]) acc[k] = { unit: k, events: 0, cost: 0 };
-          acc[k].events++;
-          const price = e.item_price || consumption.find(c => c.item_id === e.item_id)?.price || 0;
-          acc[k].cost += e.estimated_cost || (e.quantity * price);
-          return acc;
-        }, {});
-        addSheet(
-          Object.values(byUnit).sort((a,b) => b.cost - a.cost).map(u => ({
-            'Unit': u.unit, 'Events': u.events, 'Est. Cost (€)': parseFloat(u.cost.toFixed(2)),
-          })),
-          'By Unit (€)', [20,10,14]
-        );
-      }
-      if (isAdmin) {
-        const byItem = wasteEntries.reduce((acc, e) => {
-          if (!acc[e.item_name]) acc[e.item_name] = { item: e.item_name, unit: e.unit_of_measure, events: 0, qty: 0, cost: 0 };
-          acc[e.item_name].events++; acc[e.item_name].qty += e.quantity;
-          const price = e.item_price || consumption.find(c => c.item_id === e.item_id)?.price || 0;
-          acc[e.item_name].cost += e.estimated_cost || (e.quantity * price);
-          return acc;
-        }, {});
-        addSheet(
-          Object.values(byItem).sort((a,b) => b.cost - a.cost).map(i => ({
-            'Item': i.item, 'UoM': i.unit, 'Events': i.events,
-            'Total Qty': parseFloat(i.qty.toFixed(2)), 'Est. Cost (€)': parseFloat(i.cost.toFixed(2)),
-          })),
-          'By Item (€)', [30,8,10,12,14]
-        );
-      }
       XLSX.writeFile(wb, `waste_${unitLabel}_${dateStr}.xlsx`);
       toast.success('Excel exported — Waste');
     }
