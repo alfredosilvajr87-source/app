@@ -1482,6 +1482,16 @@ async def create_order_amendment(order_id: str, amendment: OrderAmendmentCreate,
     amendment_doc["created_by_name"] = user["name"]
     return OrderResponse(**amendment_doc)
 
+@api_router.delete("/orders/completed/clear")
+async def delete_completed_orders(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    """Delete all completed orders for a unit (or all units). Admin only."""
+    require_admin(user)
+    query = {"company_id": user["company_id"], "status": "completed"}
+    if unit_id:
+        query["unit_id"] = unit_id
+    result = await db.orders.delete_many(query)
+    return {"deleted_count": result.deleted_count, "message": f"Deleted {result.deleted_count} completed orders"}
+
 @api_router.delete("/orders/{order_id}")
 async def delete_order(order_id: str, user: dict = Depends(get_current_user)):
     result = await db.orders.delete_one({"id": order_id, "company_id": user["company_id"]})

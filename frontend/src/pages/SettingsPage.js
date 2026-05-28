@@ -68,11 +68,9 @@ const SettingsPage = () => {
   const [unitForm, setUnitForm] = useState({ name: '', initials: '', address: '' });
   const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' });
   const [companyForm, setCompanyForm] = useState({ name: '' });
-  const [migrating, setMigrating] = useState(false);
-  const [migrateResult, setMigrateResult] = useState(null);
-  const [clearPrepDialogOpen, setClearPrepDialogOpen] = useState(false);
-  const [clearingUnit, setClearingUnit] = useState(null);
-  const [clearing, setClearing] = useState(false);
+  const [clearOrdersDialogOpen, setClearOrdersDialogOpen] = useState(false);
+  const [clearOrdersUnit, setClearOrdersUnit] = useState(null);
+  const [clearingOrders, setClearingOrders] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -219,32 +217,19 @@ const SettingsPage = () => {
     setUnitDialogOpen(true);
   };
 
-  const handleClearPrepItems = async () => {
-    if (!clearingUnit) return;
-    setClearing(true);
+  const handleClearCompletedOrders = async () => {
+    if (!clearOrdersUnit) return;
+    setClearingOrders(true);
     try {
-      const res = await axios.delete(`${API}/prep/items`, { params: { unit_id: clearingUnit.id } });
-      toast.success(`Cleared ${res.data.message}`);
-      setClearPrepDialogOpen(false);
-      setClearingUnit(null);
+      const params = clearOrdersUnit.id === 'all' ? {} : { unit_id: clearOrdersUnit.id };
+      const res = await axios.delete(`${API}/orders/completed/clear`, { params });
+      toast.success(`${res.data.deleted_count} completed order(s) removed`);
+      setClearOrdersDialogOpen(false);
+      setClearOrdersUnit(null);
     } catch (err) {
-      toast.error('Failed to clear prep items: ' + (err.response?.data?.detail || err.message));
+      toast.error('Failed to clear orders: ' + (err.response?.data?.detail || err.message));
     } finally {
-      setClearing(false);
-    }
-  };
-
-  const handleMigration = async () => {
-    if (!window.confirm('This will assign existing data to the first unit. Run only once. Continue?')) return;
-    setMigrating(true);
-    try {
-      const res = await axios.post(`${API}/admin/migrate-unit-ids`);
-      setMigrateResult(res.data);
-      toast.success('Migration done! Records updated: ' + JSON.stringify(res.data.updated));
-    } catch (err) {
-      toast.error('Migration failed: ' + (err.response?.data?.detail || err.message));
-    } finally {
-      setMigrating(false);
+      setClearingOrders(false);
     }
   };
 
@@ -718,16 +703,16 @@ const SettingsPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      {/* Clear Prep Items — Admin Only */}
+      {/* Clear Completed Orders — Admin Only */}
       {isAdmin && units.length > 0 && (
         <Card className="border-red-200 bg-red-50">
           <CardHeader>
             <CardTitle className="font-heading text-lg flex items-center gap-2 text-red-800">
               <Trash2 className="h-5 w-5" />
-              Clear Prep Items
+              Clear Completed Orders
             </CardTitle>
             <CardDescription className="text-red-700">
-              Remove all prep items from a specific unit. This action cannot be undone.
+              Permanently remove all completed orders from a unit to start fresh. This action cannot be undone.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -737,72 +722,47 @@ const SettingsPage = () => {
                   key={unit.id}
                   variant="outline"
                   className="border-red-400 text-red-800 hover:bg-red-100"
-                  onClick={() => { setClearingUnit(unit); setClearPrepDialogOpen(true); }}
+                  onClick={() => { setClearOrdersUnit(unit); setClearOrdersDialogOpen(true); }}
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Clear {unit.name}
                 </Button>
               ))}
+              <Button
+                variant="outline"
+                className="border-red-600 text-red-900 hover:bg-red-100 font-semibold"
+                onClick={() => { setClearOrdersUnit({ id: 'all', name: 'ALL units' }); setClearOrdersDialogOpen(true); }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Clear All Units
+              </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Clear Prep Confirmation */}
-      <AlertDialog open={clearPrepDialogOpen} onOpenChange={setClearPrepDialogOpen}>
+      {/* Clear Completed Orders Confirmation */}
+      <AlertDialog open={clearOrdersDialogOpen} onOpenChange={setClearOrdersDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Clear all prep items for {clearingUnit?.name}?</AlertDialogTitle>
+            <AlertDialogTitle>Clear completed orders for {clearOrdersUnit?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete ALL prep items for <strong>{clearingUnit?.name}</strong>.
-              This cannot be undone. You will need to add items manually afterwards.
+              This will permanently delete ALL completed orders for <strong>{clearOrdersUnit?.name}</strong>.
+              Pending orders will not be affected. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={clearing}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={clearingOrders}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleClearPrepItems}
+              onClick={handleClearCompletedOrders}
               className="bg-red-600 hover:bg-red-700"
-              disabled={clearing}
+              disabled={clearingOrders}
             >
-              {clearing ? 'Clearing...' : 'Yes, delete all'}
+              {clearingOrders ? 'Clearing...' : 'Yes, delete all'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Data Migration — Admin Only */}
-      {isAdmin && (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardHeader>
-            <CardTitle className="font-heading text-lg flex items-center gap-2 text-amber-800">
-              ⚠ Data Migration
-            </CardTitle>
-            <CardDescription className="text-amber-700">
-              Run once to assign existing prep items, waste entries and stock data to the correct unit.
-              Only needed if data appears across all units.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {migrateResult && (
-              <div className="mb-3 p-3 bg-green-100 rounded-lg text-sm text-green-800">
-                ✓ Done: prep_items={migrateResult.updated?.prep_items || 0},
-                waste={migrateResult.updated?.waste_entries || 0},
-                stock={migrateResult.updated?.stock_entries || 0},
-                checks={migrateResult.updated?.prep_checks || 0}
-              </div>
-            )}
-            <Button
-              variant="outline"
-              className="border-amber-400 text-amber-800 hover:bg-amber-100"
-              onClick={handleMigration}
-              disabled={migrating}
-            >
-              {migrating ? '⏳ Migrating...' : '🔧 Run Migration'}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };

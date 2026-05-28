@@ -227,8 +227,7 @@ const DailyEntryPage = () => {
           {Object.entries(groupedItems).map(([sectionName, teamGroups]) => {
             const totalItems = Object.values(teamGroups).flat().length;
             if (totalItems === 0) return null;
-            const hasTeamColors = teamFilter === 'All' &&
-              [teamGroups.Front, teamGroups.Kitchen].some(g => g.length > 0);
+            const hasTeamColors = [teamGroups.Front, teamGroups.Kitchen].some(g => g.length > 0);
 
             return (
               <Card key={sectionName} data-testid={`entry-section-${sectionName}`}>
