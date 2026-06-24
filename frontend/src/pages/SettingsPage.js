@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useUnit } from '../context/UnitContext';
 import axios from 'axios';
+import BACKEND_URL from '../config';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -260,7 +261,7 @@ const SettingsPage = () => {
               <div className="flex-shrink-0">
                 {company?.logo_url ? (
                   <img 
-                    src={company.logo_url.startsWith('/api') ? `https://app-dupa.onrender.com${company.logo_url}` : company.logo_url}
+                    src={company.logo_url.startsWith('/api') ? `${BACKEND_URL}${company.logo_url}` : company.logo_url}
                     alt="Company Logo"
                     className="h-20 w-20 object-contain border rounded-lg"
                   />

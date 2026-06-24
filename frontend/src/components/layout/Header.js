@@ -2,6 +2,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useUnit } from '../../context/UnitContext';
 import { useEffect, useState } from 'react';
 import axios from 'axios';
+import BACKEND_URL from '../../config';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -58,7 +59,7 @@ const Header = ({ onMenuClick }) => {
         <div className="dark-header-logo-wrap">
           {company?.logo_url ? (
             <img src={company.logo_url.startsWith('/api')
-              ? `https://app-dupa.onrender.com${company.logo_url}`
+              ? `${BACKEND_URL}${company.logo_url}`
               : company.logo_url}
               alt={company?.name}
               className="dark-header-logo-img"

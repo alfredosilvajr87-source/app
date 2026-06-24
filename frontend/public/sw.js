@@ -1,10 +1,7 @@
-const CACHE = 'kitchen-pro-v1';
+const CACHE = 'kitchen-pro-v2';
 const OFFLINE_URL = '/';
 
 const PRECACHE = [
-  '/',
-  '/static/js/main.chunk.js',
-  '/static/js/bundle.js',
   '/manifest.json',
 ];
 
@@ -26,12 +23,27 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+
   // API calls: network first, no cache
   if (e.request.url.includes('/api/')) {
-    e.respondWith(fetch(e.request).catch(() => new Response('{}', { headers: { 'Content-Type': 'application/json' } })));
+    e.respondWith(
+      fetch(e.request).catch(() => new Response('{}', { headers: { 'Content-Type': 'application/json' } }))
+    );
     return;
   }
-  // Static assets: cache first
+
+  // HTML / navigation: network first so index.html is always fresh
+  // (it references the latest hashed bundle; avoids serving a stale build)
+  const isHTML = e.request.mode === 'navigate' ||
+    (e.request.headers.get('accept') || '').includes('text/html');
+  if (isHTML) {
+    e.respondWith(
+      fetch(e.request).catch(() => caches.match(e.request).then(c => c || caches.match('/')))
+    );
+    return;
+  }
+
+  // Hashed static assets: cache first
   e.respondWith(
     caches.match(e.request).then(cached => {
       const fetchPromise = fetch(e.request).then(response => {
