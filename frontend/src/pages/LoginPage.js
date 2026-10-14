@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from '../components/ui/dialog';
 import { toast } from 'sonner';
-import { ChefHat, Mail, Lock, User, Building2, KeyRound } from 'lucide-react';
+import { Store, Mail, Lock, User, Building2, KeyRound } from 'lucide-react';
 
 import { API_URL as API } from '../config';
 
@@ -96,14 +96,14 @@ const LoginPage = () => {
       <div
         className="login-image hidden lg:block"
         style={{
-          backgroundImage: `url('https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=1200&q=80')`
+          backgroundImage: 'linear-gradient(135deg, #0f172a 0%, #1d4ed8 60%, #7c3aed 100%)'
         }}
       >
         <div className="absolute inset-0 flex items-end p-12 z-10">
           <div className="text-white">
-            <h1 className="font-heading text-5xl font-black tracking-tight mb-4">Kitchen Inventory</h1>
+            <h1 className="font-heading text-5xl font-black tracking-tight mb-4">Vape Store</h1>
             <p className="text-xl text-white/80 max-w-md">
-              Professional inventory management. Organized. Sharp. Efficient.
+              Compras, vendas, estoque e faturas em um só lugar.
             </p>
           </div>
         </div>
@@ -115,16 +115,16 @@ const LoginPage = () => {
           <div className="text-center lg:hidden">
             <div className="flex items-center justify-center gap-3 mb-4">
               <div className="p-3 bg-slate-900 rounded-xl">
-                <ChefHat className="h-8 w-8 text-white" />
+                <Store className="h-8 w-8 text-white" />
               </div>
             </div>
-            <h1 className="font-heading text-3xl font-black tracking-tight text-slate-900">Kitchen Inventory</h1>
-            <p className="text-slate-500 mt-2">Professional Management System</p>
+            <h1 className="font-heading text-3xl font-black tracking-tight text-slate-900">Vape Store</h1>
+            <p className="text-slate-500 mt-2">Estoque e vendas</p>
           </div>
 
           <div className="hidden lg:block">
-            <h2 className="font-heading text-2xl font-bold text-slate-900">Welcome</h2>
-            <p className="text-slate-500 mt-1">Sign in to manage your inventory</p>
+            <h2 className="font-heading text-2xl font-bold text-slate-900">Bem-vindo</h2>
+            <p className="text-slate-500 mt-1">Entre para gerenciar sua loja</p>
           </div>
 
           <Tabs defaultValue="login" className="w-full">

@@ -10,7 +10,7 @@ services:
       - key: MONGO_URL
         sync: false
       - key: DB_NAME
-        value: lacucina_db
+        value: vape_store_db
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ORIGINS

@@ -1,7 +1,7 @@
 {
-  "name": "Kitchen Pro",
-  "short_name": "KitchenPro",
-  "description": "Kitchen Inventory Management",
+  "name": "Vape Store",
+  "short_name": "VapeStore",
+  "description": "Estoque e vendas de vapers",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",

@@ -4,6 +4,7 @@ from fastapi.responses import Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 import os
 import logging
 import asyncio
@@ -21,7 +22,6 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.units import inch
 from io import BytesIO
 import base64
-import xlsxwriter
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -32,7 +32,7 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 # JWT Config
-JWT_SECRET = os.environ.get('JWT_SECRET', 'lacucina-secret-key-2024')
+JWT_SECRET = os.environ.get('JWT_SECRET', 'vape-store-secret-key-dev')
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
@@ -42,7 +42,7 @@ MASTER_KEY = os.environ.get('MASTER_KEY', '')
 # Upload directory
 
 # Create the main app
-app = FastAPI(title="Kitchen Inventory API", version="2.0.0")
+app = FastAPI(title="Vape Store API", version="3.0.0")
 
 # Create router with /api prefix
 api_router = APIRouter(prefix="/api")
@@ -119,173 +119,6 @@ class UnitResponse(BaseModel):
     initials: str
     address: str
     created_at: str
-
-# Section
-class SectionCreate(BaseModel):
-    name: str
-    description: Optional[str] = ""
-    icon: Optional[str] = "Package"
-
-class SectionResponse(BaseModel):
-    id: str
-    company_id: str
-    name: str
-    description: str
-    icon: str
-    created_at: str
-
-# Item - Updated with minimum stock per day and visibility settings
-class MinimumStockByDay(BaseModel):
-    monday: float = 0
-    tuesday: float = 0
-    wednesday: float = 0
-    thursday: float = 0
-    friday: float = 0
-    saturday: float = 0
-    sunday: float = 0
-
-class ItemCreate(BaseModel):
-    name: str
-    section_id: str
-    unit_of_measure: str
-    minimum_stock: float = 0
-    minimum_stock_by_day: Optional[MinimumStockByDay] = None
-    average_consumption: float = 0
-    item_type: str = "all"
-    visible_in_units: List[str] = []
-    show_in_reports: bool = True
-    price: Optional[float] = 0.0
-    team: Optional[str] = ""  # "Front", "Kitchen", or ""
-
-class ItemResponse(BaseModel):
-    id: str
-    company_id: str
-    name: str
-    section_id: str
-    section_name: Optional[str] = ""
-    unit_of_measure: str
-    minimum_stock: float
-    minimum_stock_by_day: Optional[dict] = None
-    average_consumption: float
-    item_type: str = "all"
-    visible_in_units: List[str] = []
-    show_in_reports: bool = True
-    price: Optional[float] = 0.0
-    team: Optional[str] = ""
-    created_at: str
-
-# Per-unit operational config for an item (overrides global item defaults)
-class ItemUnitConfigCreate(BaseModel):
-    minimum_stock: Optional[float] = None   # overrides item.minimum_stock for this unit
-    mon_qty: Optional[float] = None
-    tue_qty: Optional[float] = None
-    wed_qty: Optional[float] = None
-    thu_qty: Optional[float] = None
-    fri_qty: Optional[float] = None
-    sat_qty: Optional[float] = None
-    sun_qty: Optional[float] = None
-
-class ItemUnitConfigResponse(BaseModel):
-    item_id: str
-    unit_id: str
-    minimum_stock: Optional[float] = None
-    mon_qty: Optional[float] = None
-    tue_qty: Optional[float] = None
-    wed_qty: Optional[float] = None
-    thu_qty: Optional[float] = None
-    fri_qty: Optional[float] = None
-    sat_qty: Optional[float] = None
-    sun_qty: Optional[float] = None
-
-# Available units of measure
-UNITS_OF_MEASURE = [
-    {"value": "kg", "label": "Kilogram (kg)"},
-    {"value": "g", "label": "Gram (g)"},
-    {"value": "l", "label": "Liter (l)"},
-    {"value": "ml", "label": "Milliliter (ml)"},
-    {"value": "un", "label": "Unit (un)"},
-    {"value": "cx", "label": "Box (cx)"},
-    {"value": "pack", "label": "Pack"},
-    {"value": "bag", "label": "Bag"},
-    {"value": "can", "label": "Can"},
-    {"value": "bottle", "label": "Bottle"},
-    {"value": "bucket", "label": "Bucket"},
-    {"value": "jar", "label": "Jar"},
-    {"value": "tray", "label": "Tray"},
-    {"value": "dozen", "label": "Dozen"},
-    {"value": "bunch", "label": "Bunch"},
-    {"value": "slice", "label": "Slice"},
-    {"value": "portion", "label": "Portion"},
-]
-
-# Safety Stock - Now with quantity increment per day
-class SafetyStockCreate(BaseModel):
-    day_of_week: int  # 0=Monday, 6=Sunday
-    quantity_increment: float = 0  # Additional quantity to add to minimum stock
-    enabled: bool = True
-
-class SafetyStockResponse(BaseModel):
-    id: str
-    unit_id: str
-    day_of_week: int
-    quantity_increment: float
-    enabled: bool
-
-# Stock Entry
-class StockEntryCreate(BaseModel):
-    item_id: str
-    quantity: float
-    unit_id: str
-
-class StockEntryResponse(BaseModel):
-    id: str
-    item_id: str
-    item_name: Optional[str] = ""
-    quantity: float
-    unit_id: str
-    entry_date: str
-    created_at: str
-
-# Order
-class OrderItemCreate(BaseModel):
-    item_id: str
-    item_name: str
-    section_id: str
-    section_name: str
-    unit_of_measure: str
-    calculated_quantity: int
-    adjusted_quantity: int
-
-class OrderCreate(BaseModel):
-    unit_id: str
-    target_date: str
-    items: List[OrderItemCreate]
-    notes: Optional[str] = ""
-
-class OrderResponse(BaseModel):
-    id: str
-    order_number: str  # Format: MK-2026-001
-    unit_id: str
-    unit_name: Optional[str] = ""
-    company_id: str
-    target_date: str
-    items: List[dict]
-    status: str  # pending, completed
-    notes: str
-    created_by: str
-    created_by_name: Optional[str] = ""
-    created_at: str
-    completed_at: Optional[str] = None
-
-# Order Amendment (changes after completion)
-class OrderAmendmentCreate(BaseModel):
-    order_id: str
-    items: List[OrderItemCreate]
-    notes: Optional[str] = ""
-
-# Settings - Email recipients for sharing
-class SettingsUpdate(BaseModel):
-    email_recipients: List[str] = []
 
 # ==================== AUTH HELPERS ====================
 
@@ -424,7 +257,7 @@ async def superadmin_delete_company(company_id: str, master_key: str = ""):
     await db.users.delete_many({"company_id": company_id})
     await db.companies.delete_one({"id": company_id})
     # Delete other company data if collections exist
-    for collection_name in ["items", "sections", "stock_entries", "orders", "units", "safety_stocks", "settings"]:
+    for collection_name in ["products", "purchases", "sales", "stock_movements", "counters", "units", "settings"]:
         try:
             collection = db[collection_name]
             await collection.delete_many({"company_id": company_id})
@@ -726,2478 +559,667 @@ async def delete_unit(unit_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Unit not found")
     return {"message": "Unit deleted"}
 
-# ==================== SECTIONS ROUTES ====================
+# ==================== LOJA DE VAPERS: MODELOS ====================
 
-@api_router.get("/sections", response_model=List[SectionResponse])
-async def get_sections(user: dict = Depends(get_current_user)):
-    sections = await db.sections.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(100)
-    return [SectionResponse(**s) for s in sections]
+class ProductCreate(BaseModel):
+    name: str
+    brand: Optional[str] = ""
+    flavor: Optional[str] = ""
+    puffs: Optional[int] = 0
+    sku: Optional[str] = ""
+    cost_price: float = Field(0, ge=0)
+    sale_price: float = Field(0, ge=0)
+    min_stock: int = Field(0, ge=0)
+    active: bool = True
 
-@api_router.post("/sections", response_model=SectionResponse)
-async def create_section(section: SectionCreate, user: dict = Depends(get_current_user)):
-    require_admin(user)
-    section_doc = {
-        "id": str(uuid.uuid4()),
-        "company_id": user["company_id"],
-        "name": section.name,
-        "description": section.description,
-        "icon": section.icon,
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.sections.insert_one(section_doc)
-    return SectionResponse(**section_doc)
+class ProductResponse(BaseModel):
+    id: str
+    company_id: str
+    name: str
+    brand: str = ""
+    flavor: str = ""
+    puffs: int = 0
+    sku: str = ""
+    cost_price: float = 0
+    sale_price: float = 0
+    min_stock: int = 0
+    stock: int = 0
+    active: bool = True
+    created_at: str
 
-@api_router.put("/sections/{section_id}", response_model=SectionResponse)
-async def update_section(section_id: str, section: SectionCreate, user: dict = Depends(get_current_user)):
-    require_admin(user)
-    result = await db.sections.update_one(
-        {"id": section_id, "company_id": user["company_id"]},
-        {"$set": {"name": section.name, "description": section.description, "icon": section.icon}}
-    )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Section not found")
-    updated = await db.sections.find_one({"id": section_id}, {"_id": 0})
-    return SectionResponse(**updated)
+class StockAdjust(BaseModel):
+    new_stock: int = Field(..., ge=0)
+    reason: Optional[str] = ""
 
-@api_router.delete("/sections/{section_id}")
-async def delete_section(section_id: str, user: dict = Depends(get_current_user)):
-    require_admin(user)
-    result = await db.sections.delete_one({"id": section_id, "company_id": user["company_id"]})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Section not found")
-    return {"message": "Section deleted"}
+class PurchaseItemIn(BaseModel):
+    product_id: str
+    quantity: int = Field(..., gt=0)
+    unit_cost: float = Field(..., ge=0)
 
-# ==================== ITEMS ROUTES ====================
+class PurchaseCreate(BaseModel):
+    supplier: Optional[str] = ""
+    supplier_doc: Optional[str] = ""   # número da nota/fatura do fornecedor
+    items: List[PurchaseItemIn]
+    notes: Optional[str] = ""
+    tz_offset: int = 0                 # minutos (Date.getTimezoneOffset do navegador)
 
-@api_router.get("/units-of-measure")
-async def get_units_of_measure():
-    """Get list of available units of measure"""
-    return UNITS_OF_MEASURE
+class SaleItemIn(BaseModel):
+    product_id: str
+    quantity: int = Field(..., gt=0)
+    unit_price: Optional[float] = Field(None, ge=0)  # vazio = preço de venda do produto
 
-# ==================== AUTO SEED ====================
+class SaleCreate(BaseModel):
+    customer_name: Optional[str] = ""
+    customer_doc: Optional[str] = ""
+    customer_phone: Optional[str] = ""
+    payment_method: str = "dinheiro"
+    discount: float = Field(0, ge=0)
+    items: List[SaleItemIn]
+    notes: Optional[str] = ""
+    tz_offset: int = 0
 
-LACUCINA_SECTIONS = [
-    "Stock Items", "Milks", "Soft Drinks", "Melts", "Other Supplies",
-    "Packaging", "Protein Balls", "Pizza", "Sauces & Ready Food",
-    "Vegetables", "Frozen", "Dairy", "Dry", "Meat", "Fruit", "Herbs"
-]
+class StoreSettings(BaseModel):
+    currency: str = "BRL"
+    tax_id: Optional[str] = ""
+    address: Optional[str] = ""
+    phone: Optional[str] = ""
+    email: Optional[str] = ""
+    invoice_footer: Optional[str] = ""
 
-LACUCINA_ITEMS = [
-    # (name, section, team, [Mon,Tue,Wed,Thu,Fri,Sat,Sun])
-    ("Coffee Beans", "Stock Items", "Front", [8,8,8,8,8,10,8]),
-    ("Decaf Coffee", "Stock Items", "Front", [2,2,2,2,2,2,2]),
-    ("Matcha", "Stock Items", "Front", [1,2,2,2,2,2,2]),
-    ("Chai Latte", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("Hot Choc Powder", "Stock Items", "Front", [1,1,1,1,2,2,1]),
-    ("Spray Cream", "Stock Items", "Front", [1,2,1,1,1,2,1]),
-    ("Baci (Box)", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("Baci (Bag)", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("Marshmallow", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("Paper Bag / Brown Paper Bag", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("Tea bags", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("White Sugar", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("Brown Sugar", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("Ketchup", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("Vinegar", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("Salt Sachets", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("Pepper Sachets", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("Jam", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("12oz Cups", "Stock Items", "Front", [6,7,6,6,6,10,6]),
-    ("8oz cups", "Stock Items", "Front", [3,4,3,3,3,8,3]),
-    ("12oz Lids", "Stock Items", "Front", [2,2,2,2,2,3,2]),
-    ("8oz Lids", "Stock Items", "Front", [1,1,1,1,1,2,1]),
-    ("12oz Cold Cups", "Stock Items", "Front", [2,2,2,2,2,2,2]),
-    ("Flat Lids", "Stock Items", "Front", [2,2,2,2,2,2,2]),
-    ("Vanilla Syrup", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("Caramel Syrup", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("Hazelnut Syrup", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("Strawberry Puree", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("Mango Puree", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("Blueberry Puree", "Stock Items", "Front", [1,1,1,1,1,1,1]),
-    ("pistachio sauce", "Stock Items", "Kitchen", [1,1,1,1,1,1,1]),
-    ("bueno sauce", "Stock Items", "Kitchen", [1,1,1,1,1,1,1]),
-    ("biscoff sauce", "Stock Items", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Full Fat Milk", "Milks", "Front", [2,4,3,4,5,6,2]),
-    ("Low Fat Milk", "Milks", "Front", [1,1,1,1,2,2,1]),
-    ("Coconut Milk", "Milks", "Front", [6,6,8,8,8,8,6]),
-    ("Oat Milk", "Milks", "Front", [12,12,12,12,18,18,12]),
-    ("Coke", "Soft Drinks", "Front", [1,1,1,1,1,1,1]),
-    ("Coke Zero", "Soft Drinks", "Front", [1,1,1,1,1,2,1]),
-    ("San Pell Orange", "Soft Drinks", "Front", [1,1,1,1,1,1,1]),
-    ("Sparkling Water", "Soft Drinks", "Front", [1,1,1,1,1,1,1]),
-    ("Still Water", "Soft Drinks", "Front", [1,1,1,1,1,1,1]),
-    ("Apple Juice", "Soft Drinks", "Front", [1,1,1,1,1,1,1]),
-    ("Moretti", "Soft Drinks", "Front", [1,1,1,1,1,1,1]),
-    ("Raffo", "Soft Drinks", "Front", [1,1,1,1,1,1,1]),
-    ("Chicken (melt)", "Melts", "Kitchen", [12,20,20,25,25,30,12]),
-    ("Tuna (melt)", "Melts", "Kitchen", [5,6,5,6,8,12,5]),
-    ("Veggie (melt)", "Melts", "Kitchen", [3,5,3,5,5,6,5]),
-    ("Ham&Cheese (melt)", "Melts", "Kitchen", [6,8,8,10,10,12,6]),
-    ("Focaccia (melt)", "Melts", "Kitchen", [8,10,8,10,12,15,8]),
-    ("Avo Club (melt)", "Melts", "Kitchen", [6,6,6,8,6,6,6]),
-    ("D9 (Grill & Oven)", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
-    ("D5 (Descaler)", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
-    ("D10", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Degreaser", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Gloves L", "Other Supplies", "Kitchen", [2,2,2,2,2,2,2]),
-    ("Heavy Duty Gloves", "Other Supplies", "Kitchen", [2,2,2,2,2,2,2]),
-    ("Kitchen Printer Inks", "Other Supplies", "Kitchen", [2,2,2,3,2,2,2]),
-    ("Pot Scrub", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Rinse Clear", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Blue Roll", "Other Supplies", "Kitchen", [1,1,1,1,1,2,1]),
-    ("Soap", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Sponge", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Suma Combi+", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Fairy Liquid", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Glass Cleaner", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Cif", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Toilet Paper", "Other Supplies", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Kitchen Printer Roll", "Other Supplies", "Kitchen", [3,1,6,6,6,6,1]),
-    ('12" Boxes', "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
-    ('20" Boxes', "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Small Foil Cont+Lids", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Burger Box Sml", "Packaging", "Kitchen", [1,1,2,2,2,3,1]),
-    ("Burger Box Lge", "Packaging", "Kitchen", [1,1,1,1,2,2,1]),
-    ("Chip Bags", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
-    ("2oz cups+lids", "Packaging", "Kitchen", [1,1,1,1,3,2,1]),
-    ("Pasta Cont+Lids", "Packaging", "Kitchen", [3,3,3,4,5,6,4]),
-    ("Clear Pasta Cont", "Packaging", "Kitchen", [1,1,1,1,2,2,4]),
-    ("Bin Bags (Black)", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Bin Bags (Clear)", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Tin Foil", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Small Salad Cont", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Large Salad Cont", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Salad Cont Lids", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
-    ("T/A Forks", "Packaging", "Front", [1,1,1,1,1,1,1]),
-    ("T/A Knives", "Packaging", "Front", [1,1,1,1,1,1,1]),
-    ("T/A Spoons", "Packaging", "Front", [1,1,1,1,1,1,1]),
-    ("Wooden Stirers", "Packaging", "Front", [1,1,1,1,1,1,1]),
-    ("Napkins (/pack)", "Packaging", "Front", [2,2,2,2,3,3,2]),
-    ("Straw", "Packaging", "Front", [1,1,1,1,1,1,1]),
-    ("Acai Containers", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Acai Lids", "Packaging", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Bamboo Straw", "Packaging", "Front", [2,2,2,2,2,2,2]),
-    ("Caramelised Biscuit", "Protein Balls", "Front", [1,1,1,1,1,1,1]),
-    ("Kinder White Choc", "Protein Balls", "Front", [1,1,1,1,1,1,1]),
-    ("Pistachio", "Protein Balls", "Front", [1,1,1,1,1,1,1]),
-    ("Peanut Butter", "Protein Balls", "Front", [1,1,1,1,1,1,1]),
-    ('12" Dough', "Pizza", "Kitchen", [3,5,3,5,7,10,3]),
-    ('20" Dough', "Pizza", "Kitchen", [2,4,2,3,5,5,2]),
-    ("Pizza Sauce", "Sauces & Ready Food", "Kitchen", [2,2,1,2,2,4,1]),
-    ("Veg Stock", "Sauces & Ready Food", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Bolognese Sce", "Sauces & Ready Food", "Kitchen", [2,2,2,2,2,3,1]),
-    ("Napoli Sauce", "Sauces & Ready Food", "Kitchen", [2,2,2,2,3,5,1]),
-    ("Soup", "Sauces & Ready Food", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Green Pesto", "Sauces & Ready Food", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Hot Honey", "Sauces & Ready Food", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Lasagne (TRAY)", "Sauces & Ready Food", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Dijon Dressing", "Sauces & Ready Food", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Mayonnaise 5L", "Sauces & Ready Food", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Lasagne for 2", "Sauces & Ready Food", "Kitchen", [4,4,4,4,6,6,4]),
-    ("Vine Tomato", "Vegetables", "Kitchen", [1,2,1,2,2,3,2]),
-    ("Sundried Tomato", "Vegetables", "Kitchen", [1,1,1,1,2,2,1]),
-    ("Avocado (case/20)", "Vegetables", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Courgette", "Vegetables", "Kitchen", [4,6,4,8,8,12,6]),
-    ("Mushroom", "Vegetables", "Kitchen", [1,1,1,2,2,2,2]),
-    ("Rocket (Bag)", "Vegetables", "Kitchen", [4,6,5,6,8,10,6]),
-    ("Spinach (Bag)", "Vegetables", "Kitchen", [4,6,5,6,8,10,6]),
-    ("Lettuce (Bag)", "Vegetables", "Kitchen", [4,6,6,6,8,12,6]),
-    ("Peppers (single)", "Vegetables", "Kitchen", [8,6,6,8,10,12,10]),
-    ("Red Onion (/kg)", "Vegetables", "Kitchen", [1,1,1,1,1,2,1]),
-    ("Sweetcorn (can)", "Vegetables", "Kitchen", [2,2,2,2,2,2,2]),
-    ("Garlic", "Vegetables", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Garlic Puree", "Vegetables", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Chilli Peppers", "Frozen", "Kitchen", [6,6,6,6,6,6,6]),
-    ("Chips (/bag)", "Frozen", "Kitchen", [4,6,5,6,10,12,5]),
-    ("Acai", "Frozen", "Kitchen", [3,3,3,3,4,5,3]),
-    ("Ravioli (/box)", "Frozen", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Peas (Frozen)", "Frozen", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Vanilla Ice Cream", "Frozen", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Prawns", "Frozen", "Kitchen", [1,1,1,2,2,3,1]),
-    ("French Toast", "Frozen", "Kitchen", [0,0,0,0,1,2,1]),
-    ("Ice (Bag)", "Frozen", "Kitchen", [1,2,2,2,5,3,1]),
-    ("Ciabatta", "Frozen", "Kitchen", [1,1,1,1,1,2,1]),
-    ("Pizza Mozzarella", "Dairy", "Kitchen", [4,8,5,6,8,12,5]),
-    ("Butter 454g", "Dairy", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Butter Portion", "Dairy", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Cream", "Dairy", "Kitchen", [6,8,6,8,10,12,4]),
-    ("Parmesan 1kg", "Dairy", "Kitchen", [3,4,4,5,8,10,4]),
-    ("Parmesan Shaving (/kg)", "Dairy", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Straciatella", "Dairy", "Kitchen", [4,6,4,6,10,12,5]),
-    ("Buffalo Mozzarella", "Dairy", "Kitchen", [3,5,3,3,5,6,4]),
-    ("Olive Oil", "Dry", "Kitchen", [1,2,1,2,2,3,1]),
-    ("Oil Spray", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Honey (/btl)", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Chia Seed", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Chilli Oil", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Salt (bucket)", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Cooking White Wine", "Dry", "Kitchen", [1,1,1,1,1,2,1]),
-    ("Balsamic Glaze", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Relish", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Bread", "Dry", "Kitchen", [5,6,6,6,8,10,4]),
-    ("Egg Yolk", "Dry", "Kitchen", [1,1,1,1,1,2,1]),
-    ("Eggs", "Dry", "Kitchen", [4,6,4,5,6,8,4]),
-    ("Peanut Butter (bucket)", "Dry", "Kitchen", [2,2,2,2,2,3,2]),
-    ("Penne (/5kg)", "Dry", "Kitchen", [2,2,2,2,2,3,1]),
-    ("Spaghetti (/5kg)", "Dry", "Kitchen", [2,2,2,2,2,2,1]),
-    ("Gluten Free Penne (/400g)", "Dry", "Kitchen", [2,2,2,2,2,4,2]),
-    ("Granola", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Focaccia Bread", "Dry", "Kitchen", [1,1,2,2,2,4,1]),
-    ("Kinder Bueno", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
-    ("GlutenFree Bread", "Dry", "Kitchen", [2,2,2,2,3,2,2]),
-    ("Flour", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Dry Funghi", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Nutella", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Biscoff Biscuits", "Dry", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Ham", "Meat", "Kitchen", [1,2,1,2,2,3,1]),
-    ("Sausages (/kg)", "Meat", "Kitchen", [2,3,3,4,5,6,2]),
-    ("Black Pudding (box)", "Meat", "Kitchen", [1,1,1,1,2,2,1]),
-    ("Pepperoni (/pack)", "Meat", "Kitchen", [4,5,3,4,6,8,4]),
-    ("Parma Ham (/tray 500g)", "Meat", "Kitchen", [2,2,2,2,2,3,1]),
-    ("Nduja", "Meat", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Goujons", "Meat", "Kitchen", [2,2,2,2,2,3,2]),
-    ("Pancetta", "Meat", "Kitchen", [6,7,5,6,8,10,4]),
-    ("Diced Chicken Bags", "Meat", "Kitchen", [1,3,1,2,3,6,1]),
-    ("Breakfast Bacon", "Meat", "Kitchen", [1,1,1,1,1,2,1]),
-    ("Pineapple (1 can)", "Fruit", "Kitchen", [2,2,2,2,2,2,2]),
-    ("Banana (pcs)", "Fruit", "Kitchen", [10,10,8,10,12,20,8]),
-    ("Blueberry", "Fruit", "Kitchen", [4,4,4,4,6,8,3]),
-    ("Strawberry", "Fruit", "Kitchen", [6,8,4,6,10,12,4]),
-    ("Lemon (/pcs)", "Fruit", "Kitchen", [10,10,10,10,10,20,10]),
-    ("Chilli Flakes", "Herbs", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Parsley", "Herbs", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Basil", "Herbs", "Kitchen", [1,1,1,1,1,2,1]),
-    ("Crushed B. Pepper", "Herbs", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Ground B.Pepper", "Herbs", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Whole B. Pepper", "Herbs", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Chips Seasoning", "Herbs", "Kitchen", [1,1,1,1,1,1,1]),
-    ("Oregano", "Herbs", "Kitchen", [1,1,1,1,1,1,1]),
-]
+PAYMENT_METHODS = {
+    "dinheiro": "Dinheiro",
+    "pix": "PIX",
+    "debito": "Cartão de débito",
+    "credito": "Cartão de crédito",
+    "transferencia": "Transferência",
+    "outro": "Outro",
+}
 
-async def auto_seed_company(company_id: str):
-    """Auto-create sections and items for a company if empty"""
-    days_keys = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"]
-    # Create sections
-    sections_map = {}
-    for sname in LACUCINA_SECTIONS:
-        sec = await db.sections.find_one({"company_id": company_id, "name": sname}, {"_id": 0})
-        if not sec:
-            sec = {"id": str(uuid.uuid4()), "company_id": company_id, "name": sname,
-                   "description": "", "icon": "Package", "created_at": datetime.now(timezone.utc).isoformat()}
-            await db.sections.insert_one(sec)
-        sections_map[sname] = sec["id"]
-    # Create items
-    created = 0
-    skipped = 0
-    for (name, section_name, team, pars) in LACUCINA_ITEMS:
-        sec_id = sections_map.get(section_name)
-        if not sec_id:
-            continue
-        existing = await db.items.find_one(
-            {"company_id": company_id, "name": {"$regex": f"^{name}$", "$options": "i"}}, {"_id": 0}
-        )
-        if existing:
-            skipped += 1
-            continue
-        avg_par = round(sum(pars) / 7, 1)
-        par_by_day = {days_keys[i]: pars[i] for i in range(7)}
-        item_doc = {
-            "id": str(uuid.uuid4()),
-            "company_id": company_id,
-            "name": name,
-            "section_id": sec_id,
-            "unit_of_measure": "un",
-            "minimum_stock": avg_par,
-            "minimum_stock_by_day": par_by_day,
-            "average_consumption": avg_par,
-            "item_type": "all",
-            "visible_in_units": [],
-            "show_in_reports": True,
-            "price": 0.0,
-            "team": team,
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }
-        await db.items.insert_one(item_doc)
-        created += 1
-    return {"created": created, "skipped": skipped, "sections": len(sections_map)}
+CURRENCIES = {
+    # código: (símbolo, separador decimal, separador de milhar)
+    "BRL": ("R$", ",", "."),
+    "EUR": ("€", ",", "."),
+    "USD": ("$", ".", ","),
+}
 
-@api_router.get("/items", response_model=List[ItemResponse])
-async def get_items(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
-    company_id = user["company_id"]
-    # Auto-seed sections and items if company has none
-    # Auto-seed DISABLED — new companies start empty
-    # count = await db.items.count_documents({"company_id": company_id})
-    # if count == 0:
-    #     await auto_seed_company(company_id)
-    items = await db.items.find({"company_id": company_id}, {"_id": 0}).to_list(2000)
-    sections = {s["id"]: s["name"] for s in await db.sections.find({"company_id": company_id}, {"_id": 0}).to_list(100)}
-    result = []
-    for item in items:
-        # Filter by unit visibility if unit_id provided
-        if unit_id:
-            visible_units = item.get("visible_in_units", [])
-            if visible_units and unit_id not in visible_units:
-                continue
-        
-        item["section_name"] = sections.get(item.get("section_id", ""), "")
-        item.setdefault("minimum_stock_by_day", None)
-        item.setdefault("item_type", "all")
-        item.setdefault("visible_in_units", [])
-        item.setdefault("show_in_reports", True)
-        item.setdefault("price", 0.0)
-        item.setdefault("team", "")
-        result.append(ItemResponse(**item))
-    return result
+# ==================== LOJA DE VAPERS: HELPERS ====================
 
-@api_router.post("/items", response_model=ItemResponse)
-async def create_item(item: ItemCreate, user: dict = Depends(get_current_user)):
-    section = await db.sections.find_one({"id": item.section_id, "company_id": user["company_id"]}, {"_id": 0})
-    if not section:
-        raise HTTPException(status_code=404, detail="Section not found")
-    
-    # Check for duplicate item (same name, section, and unit)
-    existing = await db.items.find_one({
-        "company_id": user["company_id"],
-        "name": {"$regex": f"^{item.name}$", "$options": "i"},
-        "section_id": item.section_id,
-        "unit_of_measure": item.unit_of_measure
-    }, {"_id": 0})
-    if existing:
-        raise HTTPException(status_code=400, detail="Item with same name, section and unit already exists")
-    
-    item_doc = {
-        "id": str(uuid.uuid4()),
-        "company_id": user["company_id"],
-        "name": item.name,
-        "section_id": item.section_id,
-        "unit_of_measure": item.unit_of_measure,
-        "minimum_stock": item.minimum_stock,
-        "minimum_stock_by_day": item.minimum_stock_by_day.model_dump() if item.minimum_stock_by_day else None,
-        "average_consumption": item.average_consumption,
-        "item_type": item.item_type,
-        "visible_in_units": item.visible_in_units,
-        "show_in_reports": item.show_in_reports,
-        "price": item.price or 0.0,
-        "team": item.team or "",
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.items.insert_one(item_doc)
-    item_doc["section_name"] = section["name"]
-    return ItemResponse(**item_doc)
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
-@api_router.put("/items/{item_id}", response_model=ItemResponse)
-async def update_item(item_id: str, item: ItemCreate, user: dict = Depends(get_current_user)):
-    # Check for duplicate (excluding current item)
-    existing = await db.items.find_one({
-        "company_id": user["company_id"],
-        "name": {"$regex": f"^{item.name}$", "$options": "i"},
-        "section_id": item.section_id,
-        "unit_of_measure": item.unit_of_measure,
-        "id": {"$ne": item_id}
-    }, {"_id": 0})
-    if existing:
-        raise HTTPException(status_code=400, detail="Item with same name, section and unit already exists")
-    
-    result = await db.items.update_one(
-        {"id": item_id, "company_id": user["company_id"]},
-        {"$set": {
-            "name": item.name,
-            "section_id": item.section_id,
-            "unit_of_measure": item.unit_of_measure,
-            "minimum_stock": item.minimum_stock,
-            "minimum_stock_by_day": item.minimum_stock_by_day.model_dump() if item.minimum_stock_by_day else None,
-            "average_consumption": item.average_consumption,
-            "item_type": item.item_type,
-            "visible_in_units": item.visible_in_units,
-            "show_in_reports": item.show_in_reports,
-            "price": item.price or 0.0,
-            "team": item.team or ""
-        }}
-    )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Item not found")
-    updated = await db.items.find_one({"id": item_id}, {"_id": 0})
-    section = await db.sections.find_one({"id": updated["section_id"]}, {"_id": 0})
-    updated["section_name"] = section["name"] if section else ""
-    updated.setdefault("minimum_stock_by_day", None)
-    updated.setdefault("item_type", "all")
-    updated.setdefault("visible_in_units", [])
-    updated.setdefault("show_in_reports", True)
-    updated.setdefault("price", 0.0)
-    updated.setdefault("team", "")
-    return ItemResponse(**updated)
+def money(value: float, currency: str = "BRL") -> str:
+    symbol, dec, thou = CURRENCIES.get(currency, CURRENCIES["BRL"])
+    txt = f"{abs(value):,.2f}".replace(",", "X").replace(".", dec).replace("X", thou)
+    return f"{'-' if value < 0 else ''}{symbol} {txt}"
 
-@api_router.delete("/items/{item_id}")
-async def delete_item(item_id: str, user: dict = Depends(get_current_user)):
-    result = await db.items.delete_one({"id": item_id, "company_id": user["company_id"]})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Item not found")
-    return {"message": "Item deleted"}
+def to_local(iso: str, tz_offset: int = 0) -> datetime:
+    dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    return dt - timedelta(minutes=tz_offset)
 
-@api_router.delete("/items")
-async def delete_all_items(user: dict = Depends(get_current_user)):
-    """Delete ALL items for this company — Admin only"""
-    require_admin(user)
-    result = await db.items.delete_many({"company_id": user["company_id"]})
-    return {"message": f"Deleted {result.deleted_count} items", "deleted": result.deleted_count}
-
-# ==================== SAFETY STOCK ROUTES ====================
-
-@api_router.get("/safety-stock/{unit_id}", response_model=List[SafetyStockResponse])
-async def get_safety_stock(unit_id: str, user: dict = Depends(get_current_user)):
-    configs = await db.safety_stock.find({"unit_id": unit_id}, {"_id": 0}).to_list(7)
-    
-    # If no configs exist, create defaults
-    if not configs:
-        for day in range(7):
-            config = {
-                "id": str(uuid.uuid4()),
-                "unit_id": unit_id,
-                "day_of_week": day,
-                "quantity_increment": 5 if day in [4, 5] else 0,  # Friday, Saturday higher
-                "enabled": True
-            }
-            await db.safety_stock.insert_one(config)
-        configs = await db.safety_stock.find({"unit_id": unit_id}, {"_id": 0}).to_list(7)
-    
-    return [SafetyStockResponse(**c) for c in configs]
-
-@api_router.put("/safety-stock/{unit_id}")
-async def update_safety_stock(unit_id: str, configs: List[SafetyStockCreate], user: dict = Depends(get_current_user)):
-    require_admin(user)
-    for config in configs:
-        await db.safety_stock.update_one(
-            {"unit_id": unit_id, "day_of_week": config.day_of_week},
-            {"$set": {"quantity_increment": config.quantity_increment, "enabled": config.enabled}},
-            upsert=True
-        )
-    return {"message": "Safety stock updated"}
-
-# ==================== STOCK ENTRIES ROUTES ====================
-
-@api_router.get("/stock-entries/{unit_id}", response_model=List[StockEntryResponse])
-async def get_stock_entries(unit_id: str, date: Optional[str] = None, user: dict = Depends(get_current_user)):
-    query = {"unit_id": unit_id}
-    if date:
-        query["entry_date"] = date
-    
-    entries = await db.stock_entries.find(query, {"_id": 0}).sort("entry_date", -1).to_list(1000)
-    items = {i["id"]: i["name"] for i in await db.items.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(1000)}
-    
-    result = []
-    for entry in entries:
-        entry["item_name"] = items.get(entry.get("item_id", ""), "")
-        result.append(StockEntryResponse(**entry))
-    return result
-
-@api_router.get("/stock-entries/{unit_id}/latest", response_model=List[StockEntryResponse])
-async def get_latest_stock_entries(unit_id: str, date: Optional[str] = None, user: dict = Depends(get_current_user)):
-    match_filter = {"unit_id": unit_id}
-    if date:
-        match_filter["entry_date"] = date
-    pipeline = [
-        {"$match": match_filter},
-        {"$sort": {"entry_date": -1, "created_at": -1}},
-        {"$group": {
-            "_id": "$item_id",
-            "id": {"$first": "$id"},
-            "item_id": {"$first": "$item_id"},
-            "quantity": {"$first": "$quantity"},
-            "unit_id": {"$first": "$unit_id"},
-            "entry_date": {"$first": "$entry_date"},
-            "created_at": {"$first": "$created_at"}
-        }},
-        {"$project": {"_id": 0}}
-    ]
-    entries = await db.stock_entries.aggregate(pipeline).to_list(1000)
-    items = {i["id"]: i["name"] for i in await db.items.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(1000)}
-    
-    result = []
-    for entry in entries:
-        entry["item_name"] = items.get(entry.get("item_id", ""), "")
-        result.append(StockEntryResponse(**entry))
-    return result
-
-@api_router.post("/stock-entries", response_model=List[StockEntryResponse])
-async def create_stock_entries(entries: List[StockEntryCreate], user: dict = Depends(get_current_user)):
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    results = []
-    items = {i["id"]: i["name"] for i in await db.items.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(1000)}
-    
-    for entry in entries:
-        existing = await db.stock_entries.find_one({
-            "item_id": entry.item_id,
-            "unit_id": entry.unit_id,
-            "entry_date": today
-        }, {"_id": 0})
-        
-        if existing:
-            await db.stock_entries.update_one(
-                {"id": existing["id"]},
-                {"$set": {"quantity": entry.quantity}}
-            )
-            existing["quantity"] = entry.quantity
-            existing["item_name"] = items.get(entry.item_id, "")
-            results.append(StockEntryResponse(**existing))
-        else:
-            entry_doc = {
-                "id": str(uuid.uuid4()),
-                "item_id": entry.item_id,
-                "quantity": entry.quantity,
-                "unit_id": entry.unit_id,
-                "entry_date": today,
-                "created_at": datetime.now(timezone.utc).isoformat()
-            }
-            await db.stock_entries.insert_one(entry_doc)
-            entry_doc["item_name"] = items.get(entry.item_id, "")
-            results.append(StockEntryResponse(**entry_doc))
-    
-    await update_average_consumption(user["company_id"])
-    return results
-
-async def update_average_consumption(company_id: str):
-    seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
-    
-    pipeline = [
-        {"$match": {"entry_date": {"$gte": seven_days_ago}}},
-        {"$sort": {"entry_date": 1}},
-        {"$group": {
-            "_id": {"item_id": "$item_id", "unit_id": "$unit_id"},
-            "entries": {"$push": {"quantity": "$quantity", "date": "$entry_date"}}
-        }}
-    ]
-    
-    results = await db.stock_entries.aggregate(pipeline).to_list(1000)
-    
-    for result in results:
-        entries = result["entries"]
-        if len(entries) >= 2:
-            total_consumption = 0
-            for i in range(1, len(entries)):
-                diff = entries[i-1]["quantity"] - entries[i]["quantity"]
-                if diff > 0:
-                    total_consumption += diff
-            avg_consumption = total_consumption / (len(entries) - 1) if len(entries) > 1 else 0
-            
-            await db.items.update_one(
-                {"id": result["_id"]["item_id"], "company_id": company_id},
-                {"$set": {"average_consumption": round(avg_consumption, 2)}}
-            )
-
-# ==================== ORDER NUMBER GENERATION ====================
-
-async def generate_order_number(unit_id: str) -> str:
-    unit = await db.units.find_one({"id": unit_id}, {"_id": 0})
-    if not unit:
-        raise HTTPException(status_code=404, detail="Unit not found")
-    
-    initials = unit.get("initials", "XX")
+async def next_number(company_id: str, kind: str, prefix: str) -> str:
+    """Numeração sequencial por empresa/ano: FAT-2026-0001, CMP-2026-0001"""
     year = datetime.now(timezone.utc).year
-    
-    # Get last order number for this unit and year
-    last_order = await db.orders.find_one(
-        {"unit_id": unit_id, "order_number": {"$regex": f"^{initials}-{year}-"}},
-        {"_id": 0},
-        sort=[("order_number", -1)]
+    counter = await db.counters.find_one_and_update(
+        {"_id": f"{company_id}:{kind}:{year}"},
+        {"$inc": {"seq": 1}, "$setOnInsert": {"company_id": company_id}},
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
     )
-    
-    if last_order:
-        try:
-            last_num = int(last_order["order_number"].split("-")[-1])
-            next_num = last_num + 1
-        except (ValueError, IndexError):
-            next_num = 1
-    else:
-        next_num = 1
-    
-    return f"{initials}-{year}-{next_num:03d}"
+    return f"{prefix}-{year}-{counter['seq']:04d}"
 
-# ==================== ORDERS ROUTES ====================
+async def get_store_settings(company_id: str) -> dict:
+    doc = await db.settings.find_one({"company_id": company_id}, {"_id": 0}) or {}
+    defaults = StoreSettings().model_dump()
+    return {**defaults, **{k: v for k, v in doc.items() if k in defaults and v is not None}}
 
-@api_router.get("/orders/{unit_id}", response_model=List[OrderResponse])
-async def get_orders(unit_id: str, status: Optional[str] = None, user: dict = Depends(get_current_user)):
-    query = {"unit_id": unit_id, "company_id": user["company_id"]}
-    if status:
-        query["status"] = status
-    
-    orders = await db.orders.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
-    units = {u["id"]: u["name"] for u in await db.units.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(100)}
-    users_map = {u["id"]: u["name"] for u in await db.users.find({"company_id": user["company_id"]}, {"_id": 0, "password": 0}).to_list(100)}
-    
-    result = []
-    for order in orders:
-        order["unit_name"] = units.get(order.get("unit_id", ""), "")
-        order["created_by_name"] = users_map.get(order.get("created_by", ""), "")
-        result.append(OrderResponse(**order))
-    return result
-
-@api_router.get("/orders/{unit_id}/calculate")
-async def calculate_order(unit_id: str, target_date: str, user: dict = Depends(get_current_user)):
-    target = datetime.strptime(target_date, "%Y-%m-%d")
-    day_of_week = target.weekday()
-    
-    # Get safety stock config for target day
-    safety_config = await db.safety_stock.find_one(
-        {"unit_id": unit_id, "day_of_week": day_of_week},
-        {"_id": 0}
-    )
-    quantity_increment = safety_config["quantity_increment"] if safety_config and safety_config.get("enabled") else 0
-    
-    # Get only items visible for this unit (respects visible_in_units config)
-    items = await db.items.find(
-        {"company_id": user["company_id"], "visible_in_units": unit_id},
-        {"_id": 0}
-    ).to_list(1000)
-    sections = {s["id"]: s["name"] for s in await db.sections.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(100)}
-
-    # Load per-unit configs for this unit
-    unit_cfgs = await get_unit_configs_map(unit_id, user["company_id"])
-
-    # Get latest stock entries
-    latest_entries = {}
-    pipeline = [
-        {"$match": {"unit_id": unit_id}},
-        {"$sort": {"entry_date": -1}},
-        {"$group": {
-            "_id": "$item_id",
-            "quantity": {"$first": "$quantity"}
-        }}
-    ]
-    for entry in await db.stock_entries.aggregate(pipeline).to_list(1000):
-        latest_entries[entry["_id"]] = entry["quantity"]
-
-    # Calculate order items
-    order_items = []
-    for item in items:
-        current_stock = latest_entries.get(item["id"], 0)
-        unit_cfg = unit_cfgs.get(item["id"])
-
-        # Use unit-specific minimum or global
-        minimum_stock = effective_minimum_stock(item, unit_cfg)
-
-        # Use unit-specific day qty if configured, otherwise fall back to minimum_stock
-        day_qty = effective_day_qty(item, unit_cfg, day_of_week)
-        if day_qty is not None:
-            minimum_stock = day_qty
-
-        avg_consumption = item.get("average_consumption", 0)
-
-        # Adjusted minimum = base minimum + day increment
-        adjusted_minimum = minimum_stock + quantity_increment
-
-        # Calculation: (Adjusted Minimum + Average Consumption) - Current Stock
-        needed = (adjusted_minimum + avg_consumption) - current_stock
-        needed_rounded = max(0, round(needed))  # Round to integer, no decimals
-
-        if needed_rounded > 0:
-            order_items.append({
-                "item_id": item["id"],
-                "item_name": item["name"],
-                "section_id": item["section_id"],
-                "section_name": sections.get(item["section_id"], ""),
-                "unit_of_measure": item["unit_of_measure"],
-                "current_stock": current_stock,
-                "minimum_stock": minimum_stock,
-                "adjusted_minimum": adjusted_minimum,
-                "average_consumption": avg_consumption,
-                "quantity_increment": quantity_increment,
-                "calculated_quantity": needed_rounded,
-                "adjusted_quantity": needed_rounded
-            })
-    
-    order_items.sort(key=lambda x: x["section_name"])
-    
-    return {
-        "target_date": target_date,
-        "quantity_increment": quantity_increment,
-        "items": order_items
-    }
-
-@api_router.post("/orders", response_model=OrderResponse)
-async def create_order(order: OrderCreate, user: dict = Depends(get_current_user)):
-    unit = await db.units.find_one({"id": order.unit_id, "company_id": user["company_id"]}, {"_id": 0})
-    if not unit:
-        raise HTTPException(status_code=404, detail="Unit not found")
-    
-    order_number = await generate_order_number(order.unit_id)
-    
-    order_doc = {
+async def log_movement(user: dict, product: dict, quantity: int, mtype: str,
+                       ref_type: str = "", ref_id: str = "", ref_number: str = "", note: str = ""):
+    current = await db.products.find_one({"id": product["id"]}, {"_id": 0, "stock": 1})
+    await db.stock_movements.insert_one({
         "id": str(uuid.uuid4()),
-        "order_number": order_number,
-        "unit_id": order.unit_id,
         "company_id": user["company_id"],
-        "target_date": order.target_date,
-        "items": [item.model_dump() for item in order.items],
-        "status": "pending",
-        "notes": order.notes,
-        "created_by": user["id"],
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "completed_at": None
-    }
-    await db.orders.insert_one(order_doc)
-    order_doc["unit_name"] = unit["name"]
-    order_doc["created_by_name"] = user["name"]
-    return OrderResponse(**order_doc)
+        "product_id": product["id"],
+        "product_name": product["name"],
+        "type": mtype,              # entrada, saida, estorno, ajuste
+        "quantity": quantity,       # positivo = entra, negativo = sai
+        "balance_after": (current or {}).get("stock", 0),
+        "ref_type": ref_type,
+        "ref_id": ref_id,
+        "ref_number": ref_number,
+        "note": note,
+        "user_name": user.get("name", ""),
+        "created_at": now_iso(),
+    })
 
-@api_router.put("/orders/{order_id}/status")
-async def update_order_status(order_id: str, status: str, user: dict = Depends(get_current_user)):
-    update_data = {"status": status}
-    if status == "completed":
-        update_data["completed_at"] = datetime.now(timezone.utc).isoformat()
-    
-    result = await db.orders.update_one(
-        {"id": order_id, "company_id": user["company_id"]},
-        {"$set": update_data}
+async def load_products(company_id: str, product_ids: List[str]) -> dict:
+    products = await db.products.find(
+        {"company_id": company_id, "id": {"$in": list(set(product_ids))}}, {"_id": 0}
+    ).to_list(1000)
+    found = {p["id"]: p for p in products}
+    missing = [pid for pid in product_ids if pid not in found]
+    if missing:
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+    return found
+
+def product_label(p: dict) -> str:
+    return f"{p['name']} - {p['flavor']}" if p.get("flavor") else p["name"]
+
+# ==================== PRODUTOS ====================
+
+@api_router.get("/products", response_model=List[ProductResponse])
+async def list_products(include_inactive: bool = True, user: dict = Depends(get_current_user)):
+    query = {"company_id": user["company_id"]}
+    if not include_inactive:
+        query["active"] = True
+    products = await db.products.find(query, {"_id": 0}).sort("name", 1).to_list(2000)
+    return [ProductResponse(**p) for p in products]
+
+@api_router.post("/products", response_model=ProductResponse)
+async def create_product(product: ProductCreate, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "company_id": user["company_id"],
+        **product.model_dump(),
+        "stock": 0,
+        "created_at": now_iso(),
+    }
+    await db.products.insert_one(doc)
+    doc.pop("_id", None)
+    return ProductResponse(**doc)
+
+@api_router.put("/products/{product_id}", response_model=ProductResponse)
+async def update_product(product_id: str, product: ProductCreate, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    # O estoque só muda por compra, venda ou ajuste — nunca pela edição
+    result = await db.products.update_one(
+        {"id": product_id, "company_id": user["company_id"]},
+        {"$set": product.model_dump()}
     )
     if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Order not found")
-    return {"message": f"Order status updated to {status}"}
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+    updated = await db.products.find_one({"id": product_id}, {"_id": 0})
+    return ProductResponse(**updated)
 
-@api_router.post("/orders/{order_id}/amendment", response_model=OrderResponse)
-async def create_order_amendment(order_id: str, amendment: OrderAmendmentCreate, user: dict = Depends(get_current_user)):
-    """Create amendment order for changes after original order is completed"""
-    original = await db.orders.find_one({"id": order_id, "company_id": user["company_id"]}, {"_id": 0})
-    if not original:
-        raise HTTPException(status_code=404, detail="Original order not found")
-    
-    if original["status"] != "completed":
-        raise HTTPException(status_code=400, detail="Can only amend completed orders")
-    
-    unit = await db.units.find_one({"id": original["unit_id"]}, {"_id": 0})
-    order_number = await generate_order_number(original["unit_id"])
-    
-    amendment_doc = {
-        "id": str(uuid.uuid4()),
-        "order_number": order_number,
-        "unit_id": original["unit_id"],
-        "company_id": user["company_id"],
-        "target_date": original["target_date"],
-        "items": [item.model_dump() for item in amendment.items],
-        "status": "pending",
-        "notes": f"Amendment to {original['order_number']}. {amendment.notes or ''}",
-        "created_by": user["id"],
-        "parent_order_id": order_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "completed_at": None
-    }
-    await db.orders.insert_one(amendment_doc)
-    amendment_doc["unit_name"] = unit["name"] if unit else ""
-    amendment_doc["created_by_name"] = user["name"]
-    return OrderResponse(**amendment_doc)
-
-@api_router.delete("/orders/completed/clear")
-async def delete_completed_orders(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
-    """Delete all completed orders for a unit (or all units). Admin only."""
+@api_router.delete("/products/{product_id}")
+async def delete_product(product_id: str, user: dict = Depends(get_current_user)):
     require_admin(user)
-    query = {"company_id": user["company_id"], "status": "completed"}
-    if unit_id:
-        query["unit_id"] = unit_id
-    result = await db.orders.delete_many(query)
-    return {"deleted_count": result.deleted_count, "message": f"Deleted {result.deleted_count} completed orders"}
+    product = await db.products.find_one({"id": product_id, "company_id": user["company_id"]}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+    has_history = await db.stock_movements.count_documents({"product_id": product_id})
+    if has_history:
+        # Produto com histórico é apenas desativado para não quebrar faturas antigas
+        await db.products.update_one({"id": product_id}, {"$set": {"active": False}})
+        return {"message": "Produto possui movimentações e foi desativado", "deactivated": True}
+    await db.products.delete_one({"id": product_id})
+    return {"message": "Produto excluído", "deactivated": False}
 
-@api_router.delete("/orders/{order_id}")
-async def delete_order(order_id: str, user: dict = Depends(get_current_user)):
-    result = await db.orders.delete_one({"id": order_id, "company_id": user["company_id"]})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Order not found")
-    return {"message": "Order deleted"}
+@api_router.post("/products/{product_id}/adjust", response_model=ProductResponse)
+async def adjust_stock(product_id: str, data: StockAdjust, user: dict = Depends(get_current_user)):
+    """Ajuste de inventário (contagem física)"""
+    require_admin(user)
+    product = await db.products.find_one({"id": product_id, "company_id": user["company_id"]}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+    diff = data.new_stock - product.get("stock", 0)
+    if diff != 0:
+        await db.products.update_one({"id": product_id}, {"$inc": {"stock": diff}})
+        await log_movement(user, product, diff, "ajuste", note=data.reason or "Ajuste de inventário")
+    updated = await db.products.find_one({"id": product_id}, {"_id": 0})
+    return ProductResponse(**updated)
 
-# ==================== PDF GENERATION ====================
+SAMPLE_VAPERS = [
+    # nome, marca, sabor, puffs, custo, venda, estoque mínimo
+    ("Ignite V80", "Ignite", "Menta Gelada", 8000, 45.00, 89.90, 5),
+    ("Ignite V150", "Ignite", "Uva Gelada", 15000, 65.00, 129.90, 5),
+    ("Elf Bar BC10000", "Elf Bar", "Melancia", 10000, 50.00, 99.90, 5),
+    ("Elf Bar TE6000", "Elf Bar", "Morango com Kiwi", 6000, 38.00, 74.90, 5),
+    ("Lost Mary MO5000", "Lost Mary", "Blue Razz", 5000, 35.00, 69.90, 5),
+    ("Oxbar Magic Maze", "Oxbar", "Pêssego Gelado", 10000, 48.00, 94.90, 4),
+    ("Waka soPro", "Waka", "Manga", 10000, 47.00, 92.90, 4),
+    ("Geek Bar Pulse", "Geek Bar", "Frutas Vermelhas", 15000, 62.00, 124.90, 4),
+    ("Life Pod Eco", "Life Pod", "Banana Ice", 10000, 44.00, 87.90, 4),
+    ("Vaporesso XROS 4", "Vaporesso", "", 0, 120.00, 219.90, 2),
+]
 
-async def generate_pdf_content(title: str, subtitle: str, data: list, columns: list, user_name: str, company_name: str, logo_url: str = None):
+@api_router.post("/products/seed-vapers")
+async def seed_vapers(user: dict = Depends(get_current_user)):
+    require_admin(user)
+    if await db.products.count_documents({"company_id": user["company_id"]}) > 0:
+        raise HTTPException(status_code=400, detail="Já existem produtos cadastrados")
+    docs = []
+    for i, (name, brand, flavor, puffs, cost, price, min_stock) in enumerate(SAMPLE_VAPERS, start=1):
+        docs.append({
+            "id": str(uuid.uuid4()),
+            "company_id": user["company_id"],
+            "name": name, "brand": brand, "flavor": flavor, "puffs": puffs,
+            "sku": f"VP-{i:03d}",
+            "cost_price": cost, "sale_price": price, "min_stock": min_stock,
+            "stock": 0, "active": True, "created_at": now_iso(),
+        })
+    await db.products.insert_many(docs)
+    return {"message": f"{len(docs)} vapers cadastrados", "count": len(docs)}
+
+# ==================== COMPRAS (ENTRADA DE ESTOQUE) ====================
+
+@api_router.get("/purchases")
+async def list_purchases(user: dict = Depends(get_current_user)):
+    return await db.purchases.find({"company_id": user["company_id"]}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+@api_router.get("/purchases/{purchase_id}")
+async def get_purchase(purchase_id: str, user: dict = Depends(get_current_user)):
+    purchase = await db.purchases.find_one({"id": purchase_id, "company_id": user["company_id"]}, {"_id": 0})
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Compra não encontrada")
+    return purchase
+
+@api_router.post("/purchases")
+async def create_purchase(data: PurchaseCreate, user: dict = Depends(get_current_user)):
+    if not data.items:
+        raise HTTPException(status_code=400, detail="Adicione pelo menos um item")
+    products = await load_products(user["company_id"], [i.product_id for i in data.items])
+
+    purchase_id = str(uuid.uuid4())
+    number = await next_number(user["company_id"], "purchase", "CMP")
+    lines = []
+    for item in data.items:
+        p = products[item.product_id]
+        lines.append({
+            "product_id": p["id"], "product_name": product_label(p), "sku": p.get("sku", ""),
+            "quantity": item.quantity, "unit_cost": round(item.unit_cost, 2),
+            "total": round(item.quantity * item.unit_cost, 2),
+        })
+
+    # Entrada no estoque + custo médio ponderado
+    for item in data.items:
+        p = await db.products.find_one({"id": item.product_id}, {"_id": 0})
+        old_stock, old_cost = max(p.get("stock", 0), 0), p.get("cost_price", 0)
+        new_cost = ((old_stock * old_cost) + (item.quantity * item.unit_cost)) / (old_stock + item.quantity)
+        await db.products.update_one(
+            {"id": p["id"]},
+            {"$inc": {"stock": item.quantity}, "$set": {"cost_price": round(new_cost, 2)}}
+        )
+        await log_movement(user, p, item.quantity, "entrada", "compra", purchase_id, number)
+
+    doc = {
+        "id": purchase_id,
+        "number": number,
+        "company_id": user["company_id"],
+        "supplier": data.supplier or "",
+        "supplier_doc": data.supplier_doc or "",
+        "items": lines,
+        "total": round(sum(l["total"] for l in lines), 2),
+        "notes": data.notes or "",
+        "status": "concluida",
+        "tz_offset": data.tz_offset,
+        "created_by": user["id"],
+        "created_by_name": user.get("name", ""),
+        "created_at": now_iso(),
+    }
+    await db.purchases.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.post("/purchases/{purchase_id}/cancel")
+async def cancel_purchase(purchase_id: str, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    purchase = await db.purchases.find_one({"id": purchase_id, "company_id": user["company_id"]}, {"_id": 0})
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Compra não encontrada")
+    if purchase["status"] == "cancelada":
+        raise HTTPException(status_code=400, detail="Compra já cancelada")
+
+    # Retira do estoque o que entrou; se algo já foi vendido, desfaz e bloqueia
+    removed = []
+    for line in purchase["items"]:
+        res = await db.products.update_one(
+            {"id": line["product_id"], "stock": {"$gte": line["quantity"]}},
+            {"$inc": {"stock": -line["quantity"]}}
+        )
+        if res.modified_count == 0:
+            for done in removed:
+                await db.products.update_one({"id": done["product_id"]}, {"$inc": {"stock": done["quantity"]}})
+            raise HTTPException(
+                status_code=400,
+                detail=f"Não é possível cancelar: estoque de '{line['product_name']}' já foi vendido"
+            )
+        removed.append(line)
+
+    await db.purchases.update_one({"id": purchase_id}, {"$set": {"status": "cancelada", "cancelled_at": now_iso()}})
+    for line in removed:
+        p = {"id": line["product_id"], "name": line["product_name"]}
+        await log_movement(user, p, -line["quantity"], "estorno", "compra", purchase_id, purchase["number"],
+                           "Cancelamento de compra")
+    return {"message": "Compra cancelada e estoque estornado"}
+
+# ==================== VENDAS (BAIXA DE ESTOQUE) ====================
+
+@api_router.get("/sales")
+async def list_sales(user: dict = Depends(get_current_user)):
+    return await db.sales.find({"company_id": user["company_id"]}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+@api_router.get("/sales/{sale_id}")
+async def get_sale(sale_id: str, user: dict = Depends(get_current_user)):
+    sale = await db.sales.find_one({"id": sale_id, "company_id": user["company_id"]}, {"_id": 0})
+    if not sale:
+        raise HTTPException(status_code=404, detail="Venda não encontrada")
+    return sale
+
+@api_router.post("/sales")
+async def create_sale(data: SaleCreate, user: dict = Depends(get_current_user)):
+    if not data.items:
+        raise HTTPException(status_code=400, detail="Adicione pelo menos um item")
+    if data.payment_method not in PAYMENT_METHODS:
+        raise HTTPException(status_code=400, detail="Forma de pagamento inválida")
+    products = await load_products(user["company_id"], [i.product_id for i in data.items])
+
+    # Quantidade total por produto (o mesmo produto pode aparecer em mais de uma linha)
+    needed = {}
+    for item in data.items:
+        needed[item.product_id] = needed.get(item.product_id, 0) + item.quantity
+
+    lines = []
+    for item in data.items:
+        p = products[item.product_id]
+        if not p.get("active", True):
+            raise HTTPException(status_code=400, detail=f"Produto '{product_label(p)}' está inativo")
+        price = p.get("sale_price", 0) if item.unit_price is None else item.unit_price
+        lines.append({
+            "product_id": p["id"], "product_name": product_label(p), "sku": p.get("sku", ""),
+            "quantity": item.quantity, "unit_price": round(price, 2),
+            "unit_cost": p.get("cost_price", 0),
+            "total": round(item.quantity * price, 2),
+        })
+    subtotal = round(sum(l["total"] for l in lines), 2)
+    if data.discount > subtotal:
+        raise HTTPException(status_code=400, detail="Desconto maior que o total da venda")
+
+    # Baixa atômica: só desconta se houver saldo; se faltar algo, desfaz o que já baixou
+    taken = []
+    for pid, qty in needed.items():
+        res = await db.products.update_one(
+            {"id": pid, "company_id": user["company_id"], "stock": {"$gte": qty}},
+            {"$inc": {"stock": -qty}}
+        )
+        if res.modified_count == 0:
+            for done_pid, done_qty in taken:
+                await db.products.update_one({"id": done_pid}, {"$inc": {"stock": done_qty}})
+            current = await db.products.find_one({"id": pid}, {"_id": 0, "stock": 1})
+            raise HTTPException(
+                status_code=400,
+                detail=f"Estoque insuficiente para '{product_label(products[pid])}' "
+                       f"(disponível: {(current or {}).get('stock', 0)}, pedido: {qty})"
+            )
+        taken.append((pid, qty))
+
+    sale_id = str(uuid.uuid4())
+    number = await next_number(user["company_id"], "sale", "FAT")
+    for pid, qty in taken:
+        await log_movement(user, products[pid], -qty, "saida", "venda", sale_id, number)
+
+    total = round(subtotal - data.discount, 2)
+    cost = round(sum(l["quantity"] * l["unit_cost"] for l in lines), 2)
+    doc = {
+        "id": sale_id,
+        "number": number,
+        "company_id": user["company_id"],
+        "customer_name": data.customer_name or "",
+        "customer_doc": data.customer_doc or "",
+        "customer_phone": data.customer_phone or "",
+        "payment_method": data.payment_method,
+        "items": lines,
+        "subtotal": subtotal,
+        "discount": round(data.discount, 2),
+        "total": total,
+        "cost": cost,
+        "profit": round(total - cost, 2),
+        "notes": data.notes or "",
+        "status": "concluida",
+        "tz_offset": data.tz_offset,
+        "created_by": user["id"],
+        "created_by_name": user.get("name", ""),
+        "created_at": now_iso(),
+    }
+    await db.sales.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.post("/sales/{sale_id}/cancel")
+async def cancel_sale(sale_id: str, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    # Troca o status de forma atômica para nunca estornar duas vezes
+    result = await db.sales.update_one(
+        {"id": sale_id, "company_id": user["company_id"], "status": "concluida"},
+        {"$set": {"status": "cancelada", "cancelled_at": now_iso()}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Venda não encontrada ou já cancelada")
+    sale = await db.sales.find_one({"id": sale_id}, {"_id": 0})
+    returned = {}
+    for line in sale["items"]:
+        returned[line["product_id"]] = returned.get(line["product_id"], 0) + line["quantity"]
+    names = {l["product_id"]: l["product_name"] for l in sale["items"]}
+    for pid, qty in returned.items():
+        await db.products.update_one({"id": pid}, {"$inc": {"stock": qty}})
+        await log_movement(user, {"id": pid, "name": names[pid]}, qty, "estorno", "venda", sale_id,
+                           sale["number"], "Cancelamento de venda")
+    return {"message": "Venda cancelada e estoque devolvido"}
+
+# ==================== FATURA EM PDF ====================
+
+def build_invoice_pdf(sale: dict, company: dict, settings: dict) -> bytes:
+    currency = settings.get("currency", "BRL")
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.6*inch, bottomMargin=0.6*inch,
+                            leftMargin=0.7*inch, rightMargin=0.7*inch)
     styles = getSampleStyleSheet()
-    
-    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=20, spaceAfter=10, textColor=colors.HexColor('#0f172a'))
-    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=12, spaceAfter=5, textColor=colors.HexColor('#64748b'))
-    
+    dark = colors.HexColor('#0f172a')
+    muted = colors.HexColor('#64748b')
+    small = ParagraphStyle('small', parent=styles['Normal'], fontSize=9, textColor=muted, leading=12)
+    normal = ParagraphStyle('normal', parent=styles['Normal'], fontSize=10, leading=13)
+    company_style = ParagraphStyle('company', parent=styles['Heading1'], fontSize=18, textColor=dark, spaceAfter=4)
+    right_title = ParagraphStyle('rt', parent=styles['Heading1'], fontSize=20, alignment=2, textColor=dark, spaceAfter=2)
+    right_small = ParagraphStyle('rs', parent=small, alignment=2)
     elements = []
-    
-    # Header with company name
-    elements.append(Paragraph(company_name.upper(), title_style))
-    elements.append(Paragraph(title, styles['Heading2']))
-    elements.append(Paragraph(subtitle, subtitle_style))
-    
-    now = datetime.now(timezone.utc)
-    elements.append(Paragraph(f"Generated: {now.strftime('%Y-%m-%d %H:%M:%S')} UTC", subtitle_style))
-    elements.append(Paragraph(f"Generated by: {user_name}", subtitle_style))
-    elements.append(Spacer(1, 20))
-    
-    if data:
-        # Create table
-        table_data = [columns]
-        for row in data:
-            table_data.append([str(row.get(col.lower().replace(' ', '_'), '')) for col in columns])
-        
-        col_widths = [6.5*inch / len(columns)] * len(columns)
-        table = Table(table_data, colWidths=col_widths)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0f172a')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f8fafc')),
-            ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e2e8f0')),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-            ('TOPPADDING', (0, 1), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-        ]))
-        elements.append(table)
-    else:
-        elements.append(Paragraph("No data available", styles['Normal']))
-    
+
+    # Cabeçalho: logo + dados da loja | número da fatura
+    left = []
+    logo_url = company.get("logo_url") or ""
+    if logo_url.startswith("data:image") and "base64," in logo_url:
+        try:
+            img = Image(BytesIO(base64.b64decode(logo_url.split("base64,", 1)[1])))
+            ratio = img.imageWidth / float(img.imageHeight)
+            img.drawHeight = 0.7*inch
+            img.drawWidth = min(0.7*inch * ratio, 2*inch)
+            img.hAlign = 'LEFT'
+            left.append(img)
+        except Exception:
+            pass
+    left.append(Paragraph(company.get("name", ""), company_style))
+    for label, key in [("CNPJ/NIF", "tax_id"), ("", "address"), ("Tel", "phone"), ("", "email")]:
+        if settings.get(key):
+            left.append(Paragraph(f"{label + ': ' if label else ''}{settings[key]}", small))
+
+    issued = to_local(sale["created_at"], sale.get("tz_offset", 0))
+    right = [
+        Paragraph("FATURA", right_title),
+        Paragraph(f"<b>Nº {sale['number']}</b>", ParagraphStyle('n', parent=normal, alignment=2)),
+        Paragraph(f"Emissão: {issued.strftime('%d/%m/%Y %H:%M')}", right_small),
+    ]
+    if sale.get("status") == "cancelada":
+        right.append(Paragraph("<font color='#e11d48'><b>CANCELADA</b></font>",
+                               ParagraphStyle('c', parent=normal, alignment=2, fontSize=14, spaceBefore=6)))
+    header = Table([[left, right]], colWidths=[4.1*inch, 2.75*inch])
+    header.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                                ('LEFTPADDING', (0, 0), (-1, -1), 0), ('RIGHTPADDING', (0, 0), (-1, -1), 0)]))
+    elements += [header, Spacer(1, 14)]
+
+    # Cliente
+    customer = [Paragraph("<b>CLIENTE</b>", small),
+                Paragraph(sale.get("customer_name") or "Consumidor final", normal)]
+    if sale.get("customer_doc"):
+        customer.append(Paragraph(f"CPF/NIF: {sale['customer_doc']}", small))
+    if sale.get("customer_phone"):
+        customer.append(Paragraph(f"Tel: {sale['customer_phone']}", small))
+    box = Table([[customer]], colWidths=[6.85*inch])
+    box.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f1f5f9')),
+                             ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+                             ('LEFTPADDING', (0, 0), (-1, -1), 10), ('TOPPADDING', (0, 0), (-1, -1), 8),
+                             ('BOTTOMPADDING', (0, 0), (-1, -1), 8)]))
+    elements += [box, Spacer(1, 16)]
+
+    # Itens
+    rows = [["Produto", "Qtd", "Preço unit.", "Total"]]
+    for line in sale["items"]:
+        name = line["product_name"] + (f"<br/><font size=8 color='#64748b'>{line['sku']}</font>" if line.get("sku") else "")
+        rows.append([Paragraph(name, normal), str(line["quantity"]),
+                     money(line["unit_price"], currency), money(line["total"], currency)])
+    table = Table(rows, colWidths=[3.65*inch, 0.6*inch, 1.3*inch, 1.3*inch], repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), dark),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LINEBELOW', (0, 1), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+        ('TOPPADDING', (0, 0), (-1, -1), 6), ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    elements += [table, Spacer(1, 10)]
+
+    # Totais
+    totals = [["Subtotal", money(sale["subtotal"], currency)]]
+    if sale.get("discount"):
+        totals.append(["Desconto", money(-sale["discount"], currency)])
+    totals.append(["TOTAL", money(sale["total"], currency)])
+    totals.append(["Pagamento", PAYMENT_METHODS.get(sale.get("payment_method"), sale.get("payment_method", ""))])
+    t = Table(totals, colWidths=[1.5*inch, 1.6*inch], hAlign='RIGHT')
+    total_row = len(totals) - 2
+    t.setStyle(TableStyle([
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('FONTNAME', (0, total_row), (-1, total_row), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, total_row), (-1, total_row), 13),
+        ('LINEABOVE', (0, total_row), (-1, total_row), 1, dark),
+        ('TEXTCOLOR', (0, -1), (-1, -1), muted),
+    ]))
+    elements += [t, Spacer(1, 18)]
+
+    if sale.get("notes"):
+        elements += [Paragraph("<b>Observações</b>", small), Paragraph(sale["notes"], normal), Spacer(1, 12)]
+    elements.append(Paragraph(f"Atendente: {sale.get('created_by_name', '')}", small))
+    if settings.get("invoice_footer"):
+        elements.append(Paragraph(settings["invoice_footer"], small))
+    elements.append(Spacer(1, 6))
+    elements.append(Paragraph("Documento sem valor fiscal.", small))
+
     doc.build(elements)
     return buffer.getvalue()
 
-@api_router.get("/orders/{order_id}/pdf")
-async def generate_order_pdf(order_id: str, user: dict = Depends(get_current_user)):
-    order = await db.orders.find_one({"id": order_id, "company_id": user["company_id"]}, {"_id": 0})
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
-    
-    unit = await db.units.find_one({"id": order["unit_id"]}, {"_id": 0})
-    company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
-    creator = await db.users.find_one({"id": order.get("created_by", "")}, {"_id": 0, "password": 0})
-    
-    unit_name = unit["name"] if unit else "Unknown"
-    company_name = company["name"] if company else "Company"
-    creator_name = creator["name"] if creator else "Unknown"
-    
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
-    styles = getSampleStyleSheet()
-    
-    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=20, spaceAfter=10, textColor=colors.HexColor('#0f172a'))
-    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=12, spaceAfter=5, textColor=colors.HexColor('#64748b'))
-    
-    elements = []
-    
-    # Header
-    elements.append(Paragraph(company_name.upper(), title_style))
-    elements.append(Paragraph(f"Purchase Order - {unit_name}", styles['Heading2']))
-    elements.append(Spacer(1, 10))
-    
-    # Order info
-    created_at = datetime.fromisoformat(order['created_at'].replace('Z', '+00:00'))
-    elements.append(Paragraph(f"Order Number: {order['order_number']}", subtitle_style))
-    elements.append(Paragraph(f"Target Date: {order['target_date']}", subtitle_style))
-    elements.append(Paragraph(f"Created: {created_at.strftime('%Y-%m-%d %H:%M:%S')} UTC", subtitle_style))
-    elements.append(Paragraph(f"Created by: {creator_name}", subtitle_style))
-    elements.append(Spacer(1, 20))
-    
-    # Group items by section
-    sections_dict = {}
-    for item in order["items"]:
-        section = item.get("section_name", "Other")
-        if section not in sections_dict:
-            sections_dict[section] = []
-        sections_dict[section].append(item)
-    
-    # Create table for each section
-    for section_name, items in sections_dict.items():
-        elements.append(Paragraph(section_name, styles['Heading3']))
-        elements.append(Spacer(1, 5))
-        
-        table_data = [["Item", "Quantity", "Unit"]]
-        for item in items:
-            table_data.append([
-                item["item_name"],
-                str(int(item["adjusted_quantity"])),  # No decimals
-                item["unit_of_measure"]
-            ])
-        
-        table = Table(table_data, colWidths=[4*inch, 1.5*inch, 1*inch])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0f172a')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('ALIGN', (1, 0), (1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f8fafc')),
-            ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e2e8f0')),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-            ('TOPPADDING', (0, 1), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-        ]))
-        elements.append(table)
-        elements.append(Spacer(1, 15))
-    
-    # Notes
-    if order.get("notes"):
-        elements.append(Paragraph("Notes:", styles['Heading4']))
-        elements.append(Paragraph(order["notes"], styles['Normal']))
-    
-    doc.build(elements)
-    
-    pdf_data = buffer.getvalue()
-    buffer.close()
-    
-    return {
-        "pdf_base64": base64.b64encode(pdf_data).decode(),
-        "filename": f"order_{order['order_number']}_{order['target_date']}.pdf",
-        "share_title": f"Purchase Order {order['order_number']} - {company_name}",
-        "share_text": f"Purchase Order for {unit_name} - Target: {order['target_date']} - Created: {created_at.strftime('%Y-%m-%d %H:%M')}"
-    }
-
-# ==================== ITEM UNIT CONFIG ====================
-
-async def get_unit_configs_map(unit_id: str, company_id: str) -> dict:
-    """Returns {item_id: config_doc} for all configs of this unit."""
-    configs = await db.item_unit_configs.find(
-        {"unit_id": unit_id, "company_id": company_id}, {"_id": 0}
-    ).to_list(2000)
-    return {c["item_id"]: c for c in configs}
-
-def effective_minimum_stock(item: dict, unit_cfg: Optional[dict]) -> float:
-    """Return the minimum_stock to use: unit-specific override > global item value."""
-    if unit_cfg and unit_cfg.get("minimum_stock") is not None:
-        return unit_cfg["minimum_stock"]
-    return item.get("minimum_stock", 0)
-
-def effective_day_qty(item: dict, unit_cfg: Optional[dict], day_of_week: int) -> Optional[float]:
-    """Return the day-specific required quantity for a given day (0=Mon…6=Sun), or None."""
-    day_keys = ["mon_qty", "tue_qty", "wed_qty", "thu_qty", "fri_qty", "sat_qty", "sun_qty"]
-    key = day_keys[day_of_week]
-    if unit_cfg and unit_cfg.get(key) is not None:
-        return unit_cfg[key]
-    # Fall back to global minimum_stock_by_day if set
-    msd = item.get("minimum_stock_by_day")
-    if msd:
-        global_day_keys = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-        val = msd.get(global_day_keys[day_of_week])
-        if val is not None and val > 0:
-            return float(val)
-    return None
-
-@api_router.get("/item-unit-config/{unit_id}")
-async def get_item_unit_configs(unit_id: str, user: dict = Depends(get_current_user)):
-    """Get all per-unit configs for a given unit, keyed by item_id."""
-    configs_map = await get_unit_configs_map(unit_id, user["company_id"])
-    return configs_map
-
-@api_router.put("/item-unit-config/{unit_id}/{item_id}")
-async def upsert_item_unit_config(unit_id: str, item_id: str, config: ItemUnitConfigCreate, user: dict = Depends(get_current_user)):
-    """Create or update per-unit config for a specific item+unit pair."""
-    # Verify item belongs to company
-    item = await db.items.find_one({"id": item_id, "company_id": user["company_id"]}, {"_id": 0})
-    if not item:
-        raise HTTPException(status_code=404, detail="Item not found")
-    # Verify unit belongs to company
-    unit = await db.units.find_one({"id": unit_id, "company_id": user["company_id"]}, {"_id": 0})
-    if not unit:
-        raise HTTPException(status_code=404, detail="Unit not found")
-
-    doc = config.model_dump()
-    doc["item_id"] = item_id
-    doc["unit_id"] = unit_id
-    doc["company_id"] = user["company_id"]
-
-    await db.item_unit_configs.update_one(
-        {"item_id": item_id, "unit_id": unit_id, "company_id": user["company_id"]},
-        {"$set": doc},
-        upsert=True
+@api_router.get("/sales/{sale_id}/invoice")
+async def sale_invoice_pdf(sale_id: str, user: dict = Depends(get_current_user)):
+    sale = await db.sales.find_one({"id": sale_id, "company_id": user["company_id"]}, {"_id": 0})
+    if not sale:
+        raise HTTPException(status_code=404, detail="Venda não encontrada")
+    company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0}) or {}
+    settings = await get_store_settings(user["company_id"])
+    pdf = build_invoice_pdf(sale, company, settings)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="fatura_{sale["number"]}.pdf"'},
     )
-    return doc
 
-# ==================== REPORTS ====================
+# ==================== ESTOQUE E DASHBOARD ====================
 
-@api_router.get("/reports/dashboard/{unit_id}")
-async def get_dashboard_stats(unit_id: str, user: dict = Depends(get_current_user)):
-    # Count only items visible in this unit
-    all_items_for_count = await db.items.find({"company_id": user["company_id"]}, {"_id": 0, "visible_in_units": 1, "id": 1}).to_list(2000)
-    total_items = sum(1 for i in all_items_for_count if not i.get("visible_in_units") or unit_id in i.get("visible_in_units", []))
-    
-    pipeline = [
-        {"$match": {"unit_id": unit_id}},
-        {"$sort": {"entry_date": -1}},
-        {"$group": {
-            "_id": "$item_id",
-            "quantity": {"$first": "$quantity"}
-        }}
-    ]
-    latest_entries = {e["_id"]: e["quantity"] for e in await db.stock_entries.aggregate(pipeline).to_list(1000)}
+@api_router.get("/stock-movements")
+async def list_movements(product_id: Optional[str] = None, limit: int = 300, user: dict = Depends(get_current_user)):
+    query = {"company_id": user["company_id"]}
+    if product_id:
+        query["product_id"] = product_id
+    return await db.stock_movements.find(query, {"_id": 0}).sort("created_at", -1).to_list(min(limit, 2000))
 
-    items = await db.items.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(1000)
-    unit_cfgs = await get_unit_configs_map(unit_id, user["company_id"])
-    low_stock_count = 0
-    critical_stock_count = 0
+@api_router.get("/dashboard")
+async def dashboard(tz_offset: int = 0, user: dict = Depends(get_current_user)):
+    cid = user["company_id"]
+    products = await db.products.find({"company_id": cid, "active": True}, {"_id": 0}).to_list(2000)
+    now_local = datetime.now(timezone.utc) - timedelta(minutes=tz_offset)
+    today = now_local.date()
+    month_start = today.replace(day=1)
+    # Busca ~40 dias para cobrir o mês atual e os últimos 7 dias
+    since = (datetime.now(timezone.utc) - timedelta(days=40)).isoformat()
+    sales = await db.sales.find({"company_id": cid, "status": "concluida", "created_at": {"$gte": since}},
+                                {"_id": 0}).to_list(10000)
+    purchases = await db.purchases.find({"company_id": cid, "status": "concluida", "created_at": {"$gte": since}},
+                                        {"_id": 0, "total": 1, "created_at": 1}).to_list(10000)
 
-    for item in items:
-        # Skip items not visible in this unit
-        visible_units = item.get("visible_in_units", [])
-        if visible_units and unit_id not in visible_units:
-            continue
-        current = latest_entries.get(item["id"], 0)
-        minimum = effective_minimum_stock(item, unit_cfgs.get(item["id"]))
-        if minimum > 0:
-            ratio = current / minimum
-            if ratio < 0.5:
-                critical_stock_count += 1
-            elif ratio < 1:
-                low_stock_count += 1
-    
-    pending_orders = await db.orders.count_documents({"unit_id": unit_id, "company_id": user["company_id"], "status": "pending"})
-    completed_orders = await db.orders.count_documents({"unit_id": unit_id, "company_id": user["company_id"], "status": "completed"})
-    sections_count = await db.sections.count_documents({"company_id": user["company_id"]})
-    
-    return {
-        "total_items": total_items,
-        "low_stock_count": low_stock_count,
-        "critical_stock_count": critical_stock_count,
-        "pending_orders": pending_orders,
-        "completed_orders": completed_orders,
-        "sections_count": sections_count
-    }
+    def local_day(iso):
+        return to_local(iso, tz_offset).date()
 
-@api_router.get("/reports/stock-status/{unit_id}")
-async def get_stock_status_report(unit_id: str, user: dict = Depends(get_current_user)):
-    items = await db.items.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(1000)
-    sections = {s["id"]: s["name"] for s in await db.sections.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(100)}
-    
-    pipeline = [
-        {"$match": {"unit_id": unit_id}},
-        {"$sort": {"entry_date": -1}},
-        {"$group": {
-            "_id": "$item_id",
-            "quantity": {"$first": "$quantity"},
-            "entry_date": {"$first": "$entry_date"}
-        }}
-    ]
-    latest_entries = {e["_id"]: {"quantity": e["quantity"], "date": e["entry_date"]} for e in await db.stock_entries.aggregate(pipeline).to_list(1000)}
+    today_sales = [s for s in sales if local_day(s["created_at"]) == today]
+    month_sales = [s for s in sales if local_day(s["created_at"]) >= month_start]
+    month_purchases = [p for p in purchases if local_day(p["created_at"]) >= month_start]
 
-    unit_cfgs = await get_unit_configs_map(unit_id, user["company_id"])
+    last7 = []
+    for i in range(6, -1, -1):
+        d = today - timedelta(days=i)
+        day_sales = [s for s in sales if local_day(s["created_at"]) == d]
+        last7.append({"date": d.isoformat(), "label": d.strftime("%d/%m"),
+                      "total": round(sum(s["total"] for s in day_sales), 2), "count": len(day_sales)})
 
-    result = []
-    for item in items:
-        # Skip items not visible in this unit
-        visible_units = item.get("visible_in_units", [])
-        if visible_units and unit_id not in visible_units:
-            continue
-        # Skip items excluded from reports
-        if not item.get("show_in_reports", True):
-            continue
-        entry = latest_entries.get(item["id"], {"quantity": 0, "date": None})
-        current = entry["quantity"]
-        minimum = effective_minimum_stock(item, unit_cfgs.get(item["id"]))
-        
-        status = "ok"
-        if minimum > 0:
-            ratio = current / minimum
-            if ratio < 0.5:
-                status = "critical"
-            elif ratio < 1:
-                status = "low"
-        
-        price = item.get("price", 0) or 0
-        stock_value = round(current * price, 2)
-        to_min_value = round(max(0, minimum - current) * price, 2)
+    top = {}
+    for s in month_sales:
+        for line in s["items"]:
+            t = top.setdefault(line["product_id"], {"product_name": line["product_name"], "quantity": 0, "total": 0})
+            t["quantity"] += line["quantity"]
+            t["total"] = round(t["total"] + line["total"], 2)
 
-        result.append({
-            "item_id": item["id"],
-            "item_name": item["name"],
-            "section_name": sections.get(item["section_id"], ""),
-            "unit_of_measure": item["unit_of_measure"],
-            "current_stock": current,
-            "minimum_stock": minimum,
-            "average_consumption": item.get("average_consumption", 0),
-            "status": status,
-            "last_entry_date": entry["date"],
-            "price": price,
-            "stock_value": stock_value,
-            "to_min_value": to_min_value,
-            "team": item.get("team", ""),
-            "show_in_reports": item.get("show_in_reports", True)
-        })
-    
-    result.sort(key=lambda x: (0 if x["status"] == "critical" else 1 if x["status"] == "low" else 2, x["section_name"]))
-    return result
-
-@api_router.get("/reports/stock-status/{unit_id}/pdf")
-async def get_stock_status_pdf(unit_id: str, user: dict = Depends(get_current_user)):
-    data = await get_stock_status_report(unit_id, user)
-    company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
-    unit = await db.units.find_one({"id": unit_id}, {"_id": 0})
-    
-    pdf_data = await generate_pdf_content(
-        title=f"Stock Status Report - {unit['name'] if unit else 'Unknown'}",
-        subtitle=f"As of {datetime.now(timezone.utc).strftime('%Y-%m-%d')}",
-        data=data,
-        columns=["Item Name", "Section Name", "Current Stock", "Minimum Stock", "Status"],
-        user_name=user["name"],
-        company_name=company["name"] if company else "Company"
+    low_stock = sorted(
+        [p for p in products if p.get("stock", 0) <= p.get("min_stock", 0)],
+        key=lambda p: p.get("stock", 0)
     )
-    
+    recent = await db.sales.find({"company_id": cid}, {"_id": 0}).sort("created_at", -1).to_list(6)
+
     return {
-        "pdf_base64": base64.b64encode(pdf_data).decode(),
-        "filename": f"stock_status_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M')}.pdf",
-        "share_title": f"Stock Status Report - {company['name'] if company else 'Company'}",
-        "share_text": f"Stock Status for {unit['name'] if unit else 'Unit'} - Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}"
+        "products_count": len(products),
+        "units_in_stock": sum(p.get("stock", 0) for p in products),
+        "stock_value_cost": round(sum(p.get("stock", 0) * p.get("cost_price", 0) for p in products), 2),
+        "stock_value_sale": round(sum(p.get("stock", 0) * p.get("sale_price", 0) for p in products), 2),
+        "today_revenue": round(sum(s["total"] for s in today_sales), 2),
+        "today_count": len(today_sales),
+        "month_revenue": round(sum(s["total"] for s in month_sales), 2),
+        "month_profit": round(sum(s.get("profit", 0) for s in month_sales), 2),
+        "month_count": len(month_sales),
+        "month_purchases": round(sum(p["total"] for p in month_purchases), 2),
+        "last7": last7,
+        "top_products": sorted(top.values(), key=lambda t: t["quantity"], reverse=True)[:5],
+        "low_stock": [{"id": p["id"], "name": product_label(p), "stock": p.get("stock", 0),
+                       "min_stock": p.get("min_stock", 0)} for p in low_stock],
+        "recent_sales": recent,
     }
 
-@api_router.get("/reports/consumption/{unit_id}")
-async def get_consumption_report(unit_id: str, days: int = 30, user: dict = Depends(get_current_user)):
-    start_date = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
-    
-    entries = await db.stock_entries.find(
-        {"unit_id": unit_id, "entry_date": {"$gte": start_date}},
-        {"_id": 0}
-    ).sort("entry_date", 1).to_list(10000)
-    
-    items = {i["id"]: i for i in await db.items.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(1000)}
-    sections = {s["id"]: s["name"] for s in await db.sections.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(100)}
-    
-    item_entries = {}
-    for entry in entries:
-        item_id = entry["item_id"]
-        if item_id not in item_entries:
-            item_entries[item_id] = []
-        item_entries[item_id].append(entry)
-    
-    # Only include items that have actual stock entries in THIS unit.
-    # visible_in_units controls the UI dropdown only — NOT transaction filtering.
-    result = []
-    for item_id, unit_entries in item_entries.items():
-        item_data = items.get(item_id)
-        if not item_data:
-            continue
-        total_consumption = 0
-        days_count = 0
-        for i in range(1, len(unit_entries)):
-            diff = unit_entries[i-1]["quantity"] - unit_entries[i]["quantity"]
-            if diff > 0:
-                total_consumption += diff
-                days_count += 1
-        avg_daily = total_consumption / days_count if days_count > 0 else 0
-        price = item_data.get("price", 0) or 0
-        result.append({
-            "item_id": item_id,
-            "item_name": item_data["name"],
-            "section_name": sections.get(item_data.get("section_id", ""), ""),
-            "unit_of_measure": item_data["unit_of_measure"],
-            "total_consumption": round(total_consumption, 2),
-            "average_daily": round(avg_daily, 2),
-            "entries_count": len(unit_entries),
-            "price": price,
-            "total_cost": round(total_consumption * price, 2),
-            "monthly_cost": round(avg_daily * 30 * price, 2)
-        })
-
-    result.sort(key=lambda x: x["total_consumption"], reverse=True)
-    return result
-
-@api_router.get("/reports/consumption/{unit_id}/pdf")
-async def get_consumption_pdf(unit_id: str, days: int = 30, user: dict = Depends(get_current_user)):
-    data = await get_consumption_report(unit_id, days, user)
-    company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
-    unit = await db.units.find_one({"id": unit_id}, {"_id": 0})
-    
-    pdf_data = await generate_pdf_content(
-        title=f"Consumption Report - {unit['name'] if unit else 'Unknown'}",
-        subtitle=f"Last {days} days",
-        data=data,
-        columns=["Item Name", "Section Name", "Total Consumption", "Average Daily", "Entries Count"],
-        user_name=user["name"],
-        company_name=company["name"] if company else "Company"
-    )
-    
-    return {
-        "pdf_base64": base64.b64encode(pdf_data).decode(),
-        "filename": f"consumption_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M')}.pdf",
-        "share_title": f"Consumption Report - {company['name'] if company else 'Company'}",
-        "share_text": f"Consumption for {unit['name'] if unit else 'Unit'} (Last {days} days) - Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}"
-    }
-
-@api_router.get("/reports/orders-history/{unit_id}")
-async def get_orders_history(
-    unit_id: str,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    user: dict = Depends(get_current_user)
-):
-    query = {"unit_id": unit_id, "company_id": user["company_id"]}
-    if start_date:
-        query["target_date"] = {"$gte": start_date}
-    if end_date:
-        if "target_date" in query:
-            query["target_date"]["$lte"] = end_date
-        else:
-            query["target_date"] = {"$lte": end_date}
-    
-    orders = await db.orders.find(query, {"_id": 0}).sort("target_date", -1).to_list(1000)
-    
-    total_orders = len(orders)
-    pending_count = sum(1 for o in orders if o["status"] == "pending")
-    completed_count = sum(1 for o in orders if o["status"] == "completed")
-    
-    return {
-        "orders": orders,
-        "summary": {
-            "total": total_orders,
-            "pending": pending_count,
-            "completed": completed_count
-        }
-    }
-
-@api_router.get("/reports/orders-history/{unit_id}/pdf")
-async def get_orders_history_pdf(
-    unit_id: str,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    user: dict = Depends(get_current_user)
-):
-    report = await get_orders_history(unit_id, start_date, end_date, user)
-    company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
-    unit = await db.units.find_one({"id": unit_id}, {"_id": 0})
-    
-    data = []
-    for order in report["orders"]:
-        data.append({
-            "order_number": order["order_number"],
-            "target_date": order["target_date"],
-            "items_count": str(len(order["items"])),
-            "status": order["status"],
-            "created_at": order["created_at"][:19]
-        })
-    
-    pdf_data = await generate_pdf_content(
-        title=f"Orders History - {unit['name'] if unit else 'Unknown'}",
-        subtitle=f"Period: {start_date or 'All'} to {end_date or 'Present'}",
-        data=data,
-        columns=["Order Number", "Target Date", "Items Count", "Status", "Created At"],
-        user_name=user["name"],
-        company_name=company["name"] if company else "Company"
-    )
-    
-    return {
-        "pdf_base64": base64.b64encode(pdf_data).decode(),
-        "filename": f"orders_history_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M')}.pdf",
-        "share_title": f"Orders History - {company['name'] if company else 'Company'}",
-        "share_text": f"Orders for {unit['name'] if unit else 'Unit'} - Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}"
-    }
-
-# ==================== EXCEL REPORTS ====================
-
-def _excel_colors():
-    return {
-        'primary':      '#1e293b',
-        'primary_med':  '#334155',
-        'accent':       '#3b82f6',
-        'accent_soft':  '#dbeafe',
-        'success':      '#10b981',
-        'success_soft': '#d1fae5',
-        'warning':      '#f59e0b',
-        'warning_soft': '#fef3c7',
-        'danger':       '#ef4444',
-        'danger_soft':  '#fee2e2',
-        'surface':      '#ffffff',
-        'border':       '#e2e8f0',
-        'text':         '#0f172a',
-        'muted':        '#64748b',
-        'row_alt':      '#f1f5f9',
-    }
-
-def _add_excel_formats(wb, C):
-    """Return a dict of named xlsxwriter formats."""
-    return {
-        'title': wb.add_format({'bold': True, 'font_size': 20, 'font_color': C['primary'], 'border': 0}),
-        'subtitle': wb.add_format({'font_size': 11, 'font_color': C['muted'], 'border': 0}),
-        'header': wb.add_format({
-            'bold': True, 'font_size': 10, 'bg_color': C['primary'], 'font_color': C['surface'],
-            'border': 1, 'border_color': C['primary_med'], 'align': 'center', 'valign': 'vcenter',
-        }),
-        'row_even': wb.add_format({
-            'font_size': 10, 'bg_color': C['surface'], 'font_color': C['text'],
-            'border': 1, 'border_color': C['border'], 'valign': 'vcenter',
-        }),
-        'row_odd': wb.add_format({
-            'font_size': 10, 'bg_color': C['row_alt'], 'font_color': C['text'],
-            'border': 1, 'border_color': C['border'], 'valign': 'vcenter',
-        }),
-        'row_even_num': wb.add_format({
-            'font_size': 10, 'bg_color': C['surface'], 'font_color': C['text'],
-            'border': 1, 'border_color': C['border'], 'valign': 'vcenter',
-            'num_format': '#,##0.00', 'align': 'right',
-        }),
-        'row_odd_num': wb.add_format({
-            'font_size': 10, 'bg_color': C['row_alt'], 'font_color': C['text'],
-            'border': 1, 'border_color': C['border'], 'valign': 'vcenter',
-            'num_format': '#,##0.00', 'align': 'right',
-        }),
-        'total': wb.add_format({
-            'bold': True, 'font_size': 10, 'bg_color': C['accent_soft'], 'font_color': C['primary'],
-            'border': 1, 'border_color': C['border'], 'top': 2, 'top_color': C['accent'],
-        }),
-        'total_num': wb.add_format({
-            'bold': True, 'font_size': 10, 'bg_color': C['accent_soft'], 'font_color': C['primary'],
-            'border': 1, 'border_color': C['border'], 'top': 2, 'top_color': C['accent'],
-            'num_format': '#,##0.00', 'align': 'right',
-        }),
-        'kpi_label': wb.add_format({
-            'font_size': 9, 'font_color': C['muted'], 'bg_color': C['surface'], 'border': 0,
-            'align': 'center', 'valign': 'bottom', 'top': 3, 'top_color': C['accent'],
-        }),
-        'kpi_value': wb.add_format({
-            'bold': True, 'font_size': 24, 'font_color': C['accent'],
-            'bg_color': C['surface'], 'border': 0, 'align': 'center', 'valign': 'vcenter',
-        }),
-        'kpi_value_danger': wb.add_format({
-            'bold': True, 'font_size': 24, 'font_color': C['danger'],
-            'bg_color': C['surface'], 'border': 0, 'align': 'center', 'valign': 'vcenter',
-        }),
-        'kpi_value_warning': wb.add_format({
-            'bold': True, 'font_size': 24, 'font_color': C['warning'],
-            'bg_color': C['surface'], 'border': 0, 'align': 'center', 'valign': 'vcenter',
-        }),
-        'kpi_value_success': wb.add_format({
-            'bold': True, 'font_size': 24, 'font_color': C['success'],
-            'bg_color': C['surface'], 'border': 0, 'align': 'center', 'valign': 'vcenter',
-        }),
-        'kpi_trend': wb.add_format({
-            'font_size': 9, 'font_color': C['muted'], 'bg_color': C['surface'],
-            'border': 0, 'align': 'center', 'valign': 'top',
-        }),
-        'cond_danger': wb.add_format({'bg_color': C['danger_soft'], 'font_color': C['danger'], 'bold': True, 'border': 1, 'border_color': C['border']}),
-        'cond_warning': wb.add_format({'bg_color': C['warning_soft'], 'font_color': C['warning'], 'bold': True, 'border': 1, 'border_color': C['border']}),
-        'cond_success': wb.add_format({'bg_color': C['success_soft'], 'font_color': C['success'], 'bold': True, 'border': 1, 'border_color': C['border']}),
-        'section_header': wb.add_format({
-            'bold': True, 'font_size': 11, 'font_color': C['primary_med'], 'border': 0,
-        }),
-        'bullet': wb.add_format({'font_size': 10, 'font_color': C['text'], 'border': 0, 'indent': 1}),
-    }
-
-def _write_dashboard_header(ws, wb, fmts, C, title, subtitle, generated):
-    ws.hide_gridlines(2)
-    ws.set_row(0, 45)
-    ws.set_row(1, 22)
-    ws.set_row(2, 18)
-    ws.set_column('A:A', 1)
-    ws.merge_range('B1:O1', title, fmts['title'])
-    ws.merge_range('B2:O2', subtitle, fmts['subtitle'])
-    ws.write('P1', generated, wb.add_format({'font_size': 8, 'font_color': C['muted'], 'align': 'right', 'border': 0}))
-
-def _write_kpi_card(ws, fmts, label, value, trend, row, col_s, col_e, value_fmt_key='kpi_value'):
-    ws.merge_range(row,     col_s, row,     col_e, label, fmts['kpi_label'])
-    ws.merge_range(row + 1, col_s, row + 4, col_e, value, fmts[value_fmt_key])
-    ws.merge_range(row + 5, col_s, row + 6, col_e, trend, fmts['kpi_trend'])
-    for r in range(row, row + 7):
-        ws.set_row(r, 18 if r != row + 1 else 30)
-
-def _write_table(ws, wb, fmts, headers, rows, col_types=None, start_row=0, add_total_cols=None):
-    """Write a styled table. col_types: list of 'text'|'num' per column."""
-    if col_types is None:
-        col_types = ['text'] * len(headers)
-    ws.set_row(start_row, 30)
-    for ci, h in enumerate(headers):
-        ws.write(start_row, ci, h, fmts['header'])
-
-    totals = {ci: 0.0 for ci in (add_total_cols or [])}
-    for ri, row in enumerate(rows):
-        ws.set_row(start_row + 1 + ri, 20)
-        for ci, val in enumerate(row):
-            is_num = col_types[ci] == 'num'
-            fmt_key = ('row_even_num' if ri % 2 == 0 else 'row_odd_num') if is_num else ('row_even' if ri % 2 == 0 else 'row_odd')
-            if is_num:
-                v = float(val or 0)
-                ws.write_number(start_row + 1 + ri, ci, v, fmts[fmt_key])
-                if ci in totals:
-                    totals[ci] += v
-            else:
-                ws.write(start_row + 1 + ri, ci, val or '', fmts[fmt_key])
-
-    if add_total_cols and rows:
-        total_row = start_row + 1 + len(rows)
-        ws.set_row(total_row, 22)
-        for ci in range(len(headers)):
-            if ci in totals:
-                ws.write_number(total_row, ci, round(totals[ci], 2), fmts['total_num'])
-            elif ci == 0:
-                ws.write(total_row, ci, 'TOTAL', fmts['total'])
-            else:
-                ws.write(total_row, ci, '', fmts['total'])
-
-    # Auto-fit columns
-    for ci, h in enumerate(headers):
-        max_len = len(str(h))
-        for row in rows:
-            max_len = max(max_len, len(str(row[ci] or '')))
-        ws.set_column(ci, ci, min(max(max_len + 2, 10), 45))
-    ws.freeze_panes(start_row + 1, 0)
-
-def _add_bar_chart(wb, ws_target, ws_data_name, title, row_s, row_e, col_cat, col_val,
-                   insert_cell, C, color=None, width=560, height=300):
-    chart = wb.add_chart({'type': 'bar'})
-    chart.set_title({'name': title, 'name_font': {'size': 11, 'color': C['primary'], 'bold': True}})
-    chart.add_series({
-        'categories': [ws_data_name, row_s, col_cat, row_e, col_cat],
-        'values':     [ws_data_name, row_s, col_val, row_e, col_val],
-        'fill':   {'color': color or C['accent']},
-        'border': {'none': True},
-        'gap': 60,
-    })
-    chart.set_chartarea({'border': {'none': True}, 'fill': {'color': C['surface']}})
-    chart.set_plotarea({'border': {'none': True}, 'fill': {'color': C['surface']}})
-    chart.set_legend({'none': True})
-    chart.set_size({'width': width, 'height': height})
-    chart.set_x_axis({'line': {'color': C['border']}})
-    chart.set_y_axis({'major_gridlines': {'visible': True, 'line': {'color': C['row_alt']}}, 'line': {'color': C['border']}})
-    ws_target.insert_chart(insert_cell, chart, {'x_offset': 5, 'y_offset': 5})
-
-
-# ── Stock Status Excel ──────────────────────────────────────────────────────
-
-@api_router.get("/reports/stock-status/{unit_id}/excel")
-async def get_stock_excel(unit_id: str, unit_ids: Optional[str] = None, user: dict = Depends(get_current_user)):
-    ids_list = [u.strip() for u in unit_ids.split(',')] if unit_ids else [unit_id]
-    is_multi = len(ids_list) > 1
-
-    company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
-    company_name = company["name"] if company else "Company"
-    now_str = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M")
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-    units_map = {}
-    for uid in ids_list:
-        u = await db.units.find_one({"id": uid}, {"_id": 0})
-        units_map[uid] = u["name"] if u else uid
-    unit_label = " · ".join(units_map.values())
-
-    all_data = []
-    for uid in ids_list:
-        items = await get_stock_status_report(unit_id=uid, user=user)
-        for item in items:
-            item['unit_name'] = units_map[uid]
-        all_data.extend(items)
-
-    critical = [i for i in all_data if i['status'] == 'critical']
-    low      = [i for i in all_data if i['status'] == 'low']
-    ok       = [i for i in all_data if i['status'] == 'ok']
-
-    C = _excel_colors()
-    buf = BytesIO()
-    wb = xlsxwriter.Workbook(buf, {'in_memory': True})
-    fmts = _add_excel_formats(wb, C)
-
-    ws_dash = wb.add_worksheet('📊 Dashboard')
-    ws_dash.set_tab_color(C['primary'])
-    _write_dashboard_header(ws_dash, wb, fmts, C,
-        f'Stock Status — {"All Units" if is_multi else unit_label}',
-        f'{company_name}  ·  {len(ids_list)} unit(s)',
-        f'Generated: {now_str}')
-
-    _write_kpi_card(ws_dash, fmts, 'TOTAL ITEMS', len(all_data), f'{len(ids_list)} unit(s)', 4, 1, 4)
-    _write_kpi_card(ws_dash, fmts, 'CRITICAL', len(critical), 'Below 50% of minimum', 4, 6, 9, 'kpi_value_danger')
-    _write_kpi_card(ws_dash, fmts, 'LOW STOCK', len(low), 'Below minimum', 4, 11, 14, 'kpi_value_warning')
-    _write_kpi_card(ws_dash, fmts, 'OK', len(ok), 'Sufficient stock', 4, 16, 19, 'kpi_value_success')
-    ws_dash.set_column('A:A', 1)
-
-    by_section = {}
-    for i in all_data:
-        s = i['section_name'] or 'Other'
-        by_section.setdefault(s, {'critical': 0, 'low': 0, 'ok': 0})
-        by_section[s][i['status']] += 1
-    sections_list = sorted(by_section.keys())
-    chart_start_row = 14
-    ws_dash.write(chart_start_row - 1, 22, 'Section', fmts['header'])
-    ws_dash.write(chart_start_row - 1, 23, 'Critical', fmts['header'])
-    for ri, sec in enumerate(sections_list):
-        ws_dash.write(chart_start_row + ri, 22, sec)
-        ws_dash.write(chart_start_row + ri, 23, by_section[sec]['critical'])
-    ws_dash.set_column('W:Y', 0)
-    if sections_list:
-        _add_bar_chart(wb, ws_dash, '📊 Dashboard', 'Critical Items by Section',
-                       chart_start_row, chart_start_row + len(sections_list) - 1,
-                       22, 23, 'B13', C, color=C['danger'], width=520, height=280)
-
-    headers = (['Unit'] if is_multi else []) + ['Item', 'Section', 'UoM', 'Current Stock', 'Minimum Stock', 'Status', 'Last Entry', 'Avg Consumption']
-    col_types = (['text'] if is_multi else []) + ['text','text','text','num','num','text','text','num']
-    rows = [([i['unit_name']] if is_multi else []) + [
-        i['item_name'], i['section_name'], i['unit_of_measure'],
-        i['current_stock'], i['minimum_stock'], i['status'].upper(),
-        i['last_entry_date'] or '—', i['average_consumption']
-    ] for i in all_data]
-
-    ws_all = wb.add_worksheet('📋 All Items')
-    ws_all.set_tab_color(C['accent'])
-    ws_all.merge_range(f'A1:{"I" if is_multi else "H"}1', f'All Items — {unit_label}', fmts['title'])
-    ws_all.set_row(0, 32)
-    _write_table(ws_all, wb, fmts, headers, rows, col_types, start_row=1)
-    status_col = 6 if is_multi else 5
-    last_data_row = 1 + len(all_data)
-    ws_all.conditional_format(2, status_col, last_data_row, status_col, {'type':'text','criteria':'containing','value':'CRITICAL','format': fmts['cond_danger']})
-    ws_all.conditional_format(2, status_col, last_data_row, status_col, {'type':'text','criteria':'containing','value':'LOW','format': fmts['cond_warning']})
-    ws_all.conditional_format(2, status_col, last_data_row, status_col, {'type':'text','criteria':'containing','value':'OK','format': fmts['cond_success']})
-
-    if critical:
-        crit_headers = (['Unit'] if is_multi else []) + ['Item', 'Section', 'UoM', 'Current Stock', 'Minimum Stock', 'Gap']
-        crit_types = (['text'] if is_multi else []) + ['text','text','text','num','num','num']
-        crit_total = {4, 5, 6} if is_multi else {3, 4, 5}
-        crit_rows = [([i['unit_name']] if is_multi else []) + [
-            i['item_name'], i['section_name'], i['unit_of_measure'],
-            i['current_stock'], i['minimum_stock'],
-            round(i['minimum_stock'] - i['current_stock'], 2)
-        ] for i in critical]
-        ws_crit = wb.add_worksheet('🔴 Critical')
-        ws_crit.set_tab_color(C['danger'])
-        ws_crit.merge_range(f'A1:{"G" if is_multi else "F"}1', f'Critical Items — {unit_label}', fmts['title'])
-        ws_crit.set_row(0, 32)
-        _write_table(ws_crit, wb, fmts, crit_headers, crit_rows, crit_types, start_row=1, add_total_cols=crit_total)
-
-    ws_sec = wb.add_worksheet('📂 By Section')
-    ws_sec.set_tab_color(C['primary_med'])
-    ws_sec.merge_range('A1:E1', f'Stock by Section — {unit_label}', fmts['title'])
-    ws_sec.set_row(0, 32)
-    section_summary = {}
-    for i in all_data:
-        s = i['section_name'] or 'Other'
-        if s not in section_summary:
-            section_summary[s] = {'items': 0, 'critical': 0, 'low': 0, 'ok': 0}
-        section_summary[s]['items'] += 1
-        section_summary[s][i['status']] += 1
-    _write_table(ws_sec, wb, fmts,
-        ['Section', 'Total Items', 'Critical', 'Low Stock', 'OK'],
-        [[s, v['items'], v['critical'], v['low'], v['ok']] for s, v in sorted(section_summary.items())],
-        ['text','num','num','num','num'], start_row=1)
-
-    wb.close()
-    buf.seek(0)
-    fname = unit_label.replace(' ', '_').replace(' · ', '_')[:30]
-    return {"excel_base64": base64.b64encode(buf.read()).decode(), "filename": f"stock_{fname}_{date_str}.xlsx"}
-
-
-# ── Consumption Excel ───────────────────────────────────────────────────────
-
-@api_router.get("/reports/consumption/{unit_id}/excel")
-async def get_consumption_excel(unit_id: str, unit_ids: Optional[str] = None, days: int = 30, user: dict = Depends(get_current_user)):
-    ids_list = [u.strip() for u in unit_ids.split(',')] if unit_ids else [unit_id]
-    is_multi = len(ids_list) > 1
-
-    company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
-    company_name = company["name"] if company else "Company"
-    now_str = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M")
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-    units_map = {}
-    for uid in ids_list:
-        u = await db.units.find_one({"id": uid}, {"_id": 0})
-        units_map[uid] = u["name"] if u else uid
-    unit_label = " · ".join(units_map.values())
-
-    all_data = []
-    for uid in ids_list:
-        items = await get_consumption_report(unit_id=uid, days=days, user=user)
-        for item in items:
-            item['unit_name'] = units_map[uid]
-        all_data.extend(items)
-
-    all_data_sorted = sorted(all_data, key=lambda x: x.get('total_consumption', 0), reverse=True)
-    total_cost = sum(i.get('total_cost', 0) for i in all_data)
-    total_monthly = sum(i.get('monthly_cost', 0) for i in all_data)
-    top_item = all_data_sorted[0]['item_name'][:18] if all_data_sorted else '—'
-
-    C = _excel_colors()
-    buf = BytesIO()
-    wb = xlsxwriter.Workbook(buf, {'in_memory': True})
-    fmts = _add_excel_formats(wb, C)
-
-    ws_dash = wb.add_worksheet('📊 Dashboard')
-    ws_dash.set_tab_color(C['primary'])
-    _write_dashboard_header(ws_dash, wb, fmts, C,
-        f'Consumption Report — {"All Units" if is_multi else unit_label}',
-        f'{company_name}  ·  Last {days} days',
-        f'Generated: {now_str}')
-
-    _write_kpi_card(ws_dash, fmts, 'ITEMS TRACKED', len(all_data), f'{len(ids_list)} unit(s)', 4, 1, 4)
-    _write_kpi_card(ws_dash, fmts, 'TOTAL COST (€)', f'€{total_cost:,.2f}', f'Last {days} days', 4, 6, 9, 'kpi_value_danger')
-    _write_kpi_card(ws_dash, fmts, 'MONTHLY EST. (€)', f'€{total_monthly:,.2f}', 'Projected', 4, 11, 14, 'kpi_value_warning')
-    _write_kpi_card(ws_dash, fmts, 'TOP CONSUMER', top_item, 'Highest total', 4, 16, 19)
-    ws_dash.set_column('A:A', 1)
-
-    top10 = all_data_sorted[:10]
-    chart_start = 14
-    ws_dash.set_column('W:Y', 0)
-    for ri, item in enumerate(top10):
-        ws_dash.write(chart_start + ri, 22, item['item_name'][:20])
-        ws_dash.write(chart_start + ri, 23, item['total_consumption'])
-    if top10:
-        _add_bar_chart(wb, ws_dash, '📊 Dashboard', 'Top 10 Items by Consumption',
-                       chart_start, chart_start + len(top10) - 1, 22, 23, 'B13', C,
-                       color=C['accent'], width=520, height=280)
-
-    headers = (['Unit'] if is_multi else []) + ['Item', 'Section', 'UoM', 'Total (30d)', 'Daily Avg', 'Entries', 'Price (€)', 'Total Cost (€)', 'Monthly Est. (€)']
-    col_types = (['text'] if is_multi else []) + ['text','text','text','num','num','num','num','num','num']
-    total_cols = {7, 8, 9} if is_multi else {3, 7, 8}
-    rows = [([i['unit_name']] if is_multi else []) + [
-        i['item_name'], i['section_name'], i['unit_of_measure'],
-        i['total_consumption'], i['average_daily'], i['entries_count'],
-        i.get('price', 0), i.get('total_cost', 0), i.get('monthly_cost', 0)
-    ] for i in all_data]
-
-    ws_data = wb.add_worksheet('📋 Consumption')
-    ws_data.set_tab_color(C['accent'])
-    ws_data.merge_range(f'A1:{"J" if is_multi else "I"}1', f'Consumption Detail — {unit_label} — Last {days} days', fmts['title'])
-    ws_data.set_row(0, 32)
-    _write_table(ws_data, wb, fmts, headers, rows, col_types, start_row=1, add_total_cols=total_cols)
-
-    ws_sec = wb.add_worksheet('📂 By Section')
-    ws_sec.set_tab_color(C['primary_med'])
-    ws_sec.merge_range('A1:D1', f'Consumption by Section — Last {days} days', fmts['title'])
-    ws_sec.set_row(0, 32)
-    by_sec = {}
-    for i in all_data:
-        s = i['section_name'] or 'Other'
-        by_sec.setdefault(s, {'items': 0, 'total_cost': 0.0, 'monthly_cost': 0.0})
-        by_sec[s]['items'] += 1
-        by_sec[s]['total_cost'] += i.get('total_cost', 0)
-        by_sec[s]['monthly_cost'] += i.get('monthly_cost', 0)
-    _write_table(ws_sec, wb, fmts,
-        ['Section', 'Items', 'Total Cost (€)', 'Monthly Est. (€)'],
-        [[s, v['items'], round(v['total_cost'], 2), round(v['monthly_cost'], 2)] for s, v in sorted(by_sec.items())],
-        ['text','num','num','num'], start_row=1, add_total_cols={1, 2, 3})
-
-    wb.close()
-    buf.seek(0)
-    fname = unit_label.replace(' ', '_').replace(' · ', '_')[:30]
-    return {"excel_base64": base64.b64encode(buf.read()).decode(), "filename": f"consumption_{fname}_{date_str}.xlsx"}
-
-
-# ── Orders History Excel ────────────────────────────────────────────────────
-
-@api_router.get("/reports/orders-history/{unit_id}/excel")
-async def get_orders_excel(unit_id: str, unit_ids: Optional[str] = None,
-                           start_date: Optional[str] = None,
-                           end_date: Optional[str] = None, user: dict = Depends(get_current_user)):
-    ids_list = [u.strip() for u in unit_ids.split(',')] if unit_ids else [unit_id]
-    is_multi = len(ids_list) > 1
-
-    company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
-    company_name = company["name"] if company else "Company"
-    now_str = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M")
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    period = f"{start_date or '—'} → {end_date or date_str}"
-
-    units_map = {}
-    for uid in ids_list:
-        u = await db.units.find_one({"id": uid}, {"_id": 0})
-        units_map[uid] = u["name"] if u else uid
-    unit_label = " · ".join(units_map.values())
-
-    all_orders = []
-    total_summary = {'total': 0, 'pending': 0, 'completed': 0}
-    for uid in ids_list:
-        report = await get_orders_history(unit_id=uid, start_date=start_date, end_date=end_date, user=user)
-        for o in report['orders']:
-            o['unit_name'] = units_map[uid]
-        all_orders.extend(report['orders'])
-        total_summary['total'] += report['summary']['total']
-        total_summary['pending'] += report['summary']['pending']
-        total_summary['completed'] += report['summary']['completed']
-
-    C = _excel_colors()
-    buf = BytesIO()
-    wb = xlsxwriter.Workbook(buf, {'in_memory': True})
-    fmts = _add_excel_formats(wb, C)
-
-    ws_dash = wb.add_worksheet('📊 Dashboard')
-    ws_dash.set_tab_color(C['primary'])
-    _write_dashboard_header(ws_dash, wb, fmts, C,
-        f'Orders Report — {"All Units" if is_multi else unit_label}',
-        f'{company_name}  ·  {period}',
-        f'Generated: {now_str}')
-
-    _write_kpi_card(ws_dash, fmts, 'TOTAL ORDERS', total_summary['total'], period, 4, 1, 4)
-    _write_kpi_card(ws_dash, fmts, 'PENDING', total_summary['pending'], 'Awaiting delivery', 4, 6, 9, 'kpi_value_warning')
-    _write_kpi_card(ws_dash, fmts, 'COMPLETED', total_summary['completed'], 'Delivered', 4, 11, 14, 'kpi_value_success')
-    ws_dash.set_column('A:A', 1)
-
-    order_headers = (['Unit'] if is_multi else []) + ['Order #', 'Target Date', 'Items Count', 'Status', 'Created By', 'Created At']
-    order_types = (['text'] if is_multi else []) + ['text','text','num','text','text','text']
-    order_rows = [([o['unit_name']] if is_multi else []) + [
-        o.get('order_number',''), o.get('target_date',''),
-        len(o.get('items', [])), o.get('status','').upper(),
-        o.get('created_by_name',''), (o.get('created_at','')[:10] if o.get('created_at') else '')
-    ] for o in all_orders]
-
-    ws_orders = wb.add_worksheet('📋 Orders')
-    ws_orders.set_tab_color(C['accent'])
-    ws_orders.merge_range(f'A1:{"G" if is_multi else "F"}1', f'Order History — {unit_label}', fmts['title'])
-    ws_orders.set_row(0, 32)
-    _write_table(ws_orders, wb, fmts, order_headers, order_rows, order_types, start_row=1)
-
-    item_headers = (['Unit'] if is_multi else []) + ['Order #', 'Target Date', 'Item', 'Section', 'Quantity', 'UoM']
-    item_types = (['text'] if is_multi else []) + ['text','text','text','text','num','text']
-    item_total = {5} if is_multi else {4}
-    all_item_rows = []
-    for o in all_orders:
-        for item in o.get('items', []):
-            row = ([o.get('unit_name','')] if is_multi else []) + [
-                o.get('order_number',''), o.get('target_date',''),
-                item.get('item_name',''), item.get('section_name',''),
-                item.get('adjusted_quantity', 0), item.get('unit_of_measure','')
-            ]
-            all_item_rows.append(row)
-
-    ws_items = wb.add_worksheet('📦 Items Detail')
-    ws_items.set_tab_color(C['primary_med'])
-    ws_items.merge_range(f'A1:{"G" if is_multi else "F"}1', 'All Order Items', fmts['title'])
-    ws_items.set_row(0, 32)
-    _write_table(ws_items, wb, fmts, item_headers, all_item_rows, item_types, start_row=1, add_total_cols=item_total)
-
-    wb.close()
-    buf.seek(0)
-    fname = unit_label.replace(' ', '_').replace(' · ', '_')[:30]
-    return {"excel_base64": base64.b64encode(buf.read()).decode(), "filename": f"orders_{fname}_{date_str}.xlsx"}
-
-
-# ── Waste Excel ─────────────────────────────────────────────────────────────
-
-@api_router.get("/reports/waste/{unit_id}/excel")
-async def get_waste_excel(unit_id: str, unit_ids: Optional[str] = None, days: int = 30, user: dict = Depends(get_current_user)):
-    ids_list = [u.strip() for u in unit_ids.split(',')] if unit_ids else [unit_id]
-    is_multi = len(ids_list) > 1
-
-    since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
-    query = {"unit_id": {"$in": ids_list}, "company_id": user["company_id"], "date": {"$gte": since}}
-    entries_raw = await db.waste_entries.find(query, {"_id": 0}).sort("date", -1).to_list(5000)
-
-    company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
-    company_name = company["name"] if company else "Company"
-    now_str = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M")
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-    units_map = {}
-    for uid in ids_list:
-        u = await db.units.find_one({"id": uid}, {"_id": 0})
-        units_map[uid] = u["name"] if u else uid
-    unit_label = " · ".join(units_map.values())
-
-    items_db = {i["id"]: i for i in await db.items.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(1000)}
-    entries = []
-    for e in entries_raw:
-        item = items_db.get(e.get('item_id', ''), {})
-        price = e.get('item_price') or item.get('price', 0) or 0
-        qty = e.get('quantity', 0)
-        cost = e.get('estimated_cost') or round(qty * price, 2)
-        uname = units_map.get(e.get('unit_id', ''), e.get('unit_id', ''))
-        entries.append({**e, 'estimated_cost': cost, 'price': price, 'unit_name': uname})
-
-    total_events = len(entries)
-    total_cost = sum(e['estimated_cost'] for e in entries)
-
-    by_reason = {}
-    for e in entries:
-        r = e.get('reason_name') or 'Other'
-        by_reason.setdefault(r, {'events': 0, 'cost': 0.0})
-        by_reason[r]['events'] += 1
-        by_reason[r]['cost'] += e['estimated_cost']
-
-    by_item = {}
-    for e in entries:
-        n = e.get('item_name') or '—'
-        by_item.setdefault(n, {'unit': e.get('unit_of_measure',''), 'events': 0, 'qty': 0.0, 'cost': 0.0})
-        by_item[n]['events'] += 1
-        by_item[n]['qty'] += e.get('quantity', 0)
-        by_item[n]['cost'] += e['estimated_cost']
-
-    top_reason = max(by_reason, key=lambda r: by_reason[r]['events']) if by_reason else '—'
-
-    C = _excel_colors()
-    buf = BytesIO()
-    wb = xlsxwriter.Workbook(buf, {'in_memory': True})
-    fmts = _add_excel_formats(wb, C)
-
-    ws_dash = wb.add_worksheet('📊 Dashboard')
-    ws_dash.set_tab_color(C['primary'])
-    _write_dashboard_header(ws_dash, wb, fmts, C,
-        f'Waste Report — {"All Units" if is_multi else unit_label}',
-        f'{company_name}  ·  Last {days} days',
-        f'Generated: {now_str}')
-
-    _write_kpi_card(ws_dash, fmts, 'WASTE EVENTS', total_events, f'Last {days} days', 4, 1, 4, 'kpi_value_danger')
-    _write_kpi_card(ws_dash, fmts, 'TOTAL COST (€)', f'€{total_cost:,.2f}', 'Estimated loss', 4, 6, 9, 'kpi_value_warning')
-    _write_kpi_card(ws_dash, fmts, 'TOP REASON', top_reason[:18], 'Most frequent', 4, 11, 14)
-    _write_kpi_card(ws_dash, fmts, 'ITEMS WASTED', len(by_item), 'Unique items', 4, 16, 19, 'kpi_value_danger')
-    ws_dash.set_column('A:A', 1)
-
-    reasons_sorted = sorted(by_reason.items(), key=lambda x: x[1]['events'], reverse=True)[:8]
-    chart_start = 14
-    ws_dash.set_column('W:Y', 0)
-    for ri, (reason, rv) in enumerate(reasons_sorted):
-        ws_dash.write(chart_start + ri, 22, reason[:20])
-        ws_dash.write(chart_start + ri, 23, rv['events'])
-    if reasons_sorted:
-        _add_bar_chart(wb, ws_dash, '📊 Dashboard', 'Waste Events by Reason',
-                       chart_start, chart_start + len(reasons_sorted) - 1, 22, 23, 'B13', C,
-                       color=C['warning'], width=520, height=280)
-
-    detail_headers = (['Unit'] if is_multi else []) + ['Date', 'Item', 'Quantity', 'UoM', 'Reason', 'Initials', 'Est. Cost (€)', 'Notes']
-    detail_types = (['text'] if is_multi else []) + ['text','text','num','text','text','text','num','text']
-    detail_total = {3, 7} if is_multi else {2, 6}
-    detail_rows = [([e['unit_name']] if is_multi else []) + [
-        e.get('date',''), e.get('item_name',''), e.get('quantity', 0),
-        e.get('unit_of_measure',''), e.get('reason_name',''), e.get('initials',''),
-        e['estimated_cost'], e.get('notes','')
-    ] for e in entries]
-
-    ws_detail = wb.add_worksheet('📋 Waste Detail')
-    ws_detail.set_tab_color(C['accent'])
-    ws_detail.merge_range(f'A1:{"I" if is_multi else "H"}1', f'Waste Entries — {unit_label} — Last {days} days', fmts['title'])
-    ws_detail.set_row(0, 32)
-    _write_table(ws_detail, wb, fmts, detail_headers, detail_rows, detail_types, start_row=1, add_total_cols=detail_total)
-
-    ws_reason = wb.add_worksheet('📂 By Reason')
-    ws_reason.set_tab_color(C['warning'])
-    ws_reason.merge_range('A1:C1', 'Waste by Reason', fmts['title'])
-    ws_reason.set_row(0, 32)
-    _write_table(ws_reason, wb, fmts,
-        ['Reason', 'Events', 'Est. Cost (€)'],
-        [[r, v['events'], round(v['cost'], 2)] for r, v in sorted(by_reason.items(), key=lambda x: -x[1]['events'])],
-        ['text','num','num'], start_row=1, add_total_cols={1, 2})
-
-    ws_item_sheet = wb.add_worksheet('📂 By Item')
-    ws_item_sheet.set_tab_color(C['danger'])
-    ws_item_sheet.merge_range('A1:E1', 'Waste by Item', fmts['title'])
-    ws_item_sheet.set_row(0, 32)
-    _write_table(ws_item_sheet, wb, fmts,
-        ['Item', 'UoM', 'Events', 'Total Qty', 'Est. Cost (€)'],
-        [[n, v['unit'], v['events'], round(v['qty'], 2), round(v['cost'], 2)]
-         for n, v in sorted(by_item.items(), key=lambda x: -x[1]['cost'])],
-        ['text','text','num','num','num'], start_row=1, add_total_cols={2, 3, 4})
-
-    wb.close()
-    buf.seek(0)
-    fname = unit_label.replace(' ', '_').replace(' · ', '_')[:30]
-    return {"excel_base64": base64.b64encode(buf.read()).decode(), "filename": f"waste_{fname}_{date_str}.xlsx"}
-
-
-# ==================== SETTINGS ====================
+# ==================== CONFIGURAÇÕES DA LOJA ====================
 
 @api_router.get("/settings")
-async def get_settings(user: dict = Depends(get_current_user)):
-    settings = await db.settings.find_one({"company_id": user["company_id"]}, {"_id": 0})
-    if not settings:
-        settings = {
-            "id": str(uuid.uuid4()),
-            "company_id": user["company_id"],
-            "email_recipients": []
-        }
-        await db.settings.insert_one(settings)
-    return settings
+async def read_settings(user: dict = Depends(get_current_user)):
+    return await get_store_settings(user["company_id"])
 
 @api_router.put("/settings")
-async def update_settings(update: SettingsUpdate, user: dict = Depends(get_current_user)):
+async def save_settings(data: StoreSettings, user: dict = Depends(get_current_user)):
     require_admin(user)
-    
+    if data.currency not in CURRENCIES:
+        raise HTTPException(status_code=400, detail="Moeda inválida")
     await db.settings.update_one(
         {"company_id": user["company_id"]},
-        {"$set": {"email_recipients": update.email_recipients}},
+        {"$set": {**data.model_dump(), "company_id": user["company_id"]}},
         upsert=True
     )
-    return {"message": "Settings updated"}
-
-# ==================== SEED DATA ====================
-
-@api_router.post("/seed")
-async def seed_data(user: dict = Depends(get_current_user)):
-    existing_sections = await db.sections.count_documents({"company_id": user["company_id"]})
-    if existing_sections > 0:
-        return {"message": "Data already seeded"}
-    
-    sections = [
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Freezer", "description": "Frozen products", "icon": "Snowflake", "created_at": datetime.now(timezone.utc).isoformat()},
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Meats", "description": "Fresh meats and proteins", "icon": "Beef", "created_at": datetime.now(timezone.utc).isoformat()},
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Produce", "description": "Fresh fruits and vegetables", "icon": "Carrot", "created_at": datetime.now(timezone.utc).isoformat()},
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Grocery", "description": "Dry goods and pantry items", "icon": "ShoppingBasket", "created_at": datetime.now(timezone.utc).isoformat()},
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Dairy", "description": "Milk, cheese, and dairy products", "icon": "Milk", "created_at": datetime.now(timezone.utc).isoformat()},
-    ]
-    await db.sections.insert_many(sections)
-    
-    items = [
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Frozen Shrimp", "section_id": sections[0]["id"], "unit_of_measure": "kg", "minimum_stock": 5, "average_consumption": 2, "created_at": datetime.now(timezone.utc).isoformat()},
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Ice Cream", "section_id": sections[0]["id"], "unit_of_measure": "l", "minimum_stock": 10, "average_consumption": 3, "created_at": datetime.now(timezone.utc).isoformat()},
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Chicken Breast", "section_id": sections[1]["id"], "unit_of_measure": "kg", "minimum_stock": 10, "average_consumption": 5, "created_at": datetime.now(timezone.utc).isoformat()},
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Ground Beef", "section_id": sections[1]["id"], "unit_of_measure": "kg", "minimum_stock": 8, "average_consumption": 4, "created_at": datetime.now(timezone.utc).isoformat()},
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Pork Loin", "section_id": sections[1]["id"], "unit_of_measure": "kg", "minimum_stock": 6, "average_consumption": 3, "created_at": datetime.now(timezone.utc).isoformat()},
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Tomatoes", "section_id": sections[2]["id"], "unit_of_measure": "kg", "minimum_stock": 15, "average_consumption": 8, "created_at": datetime.now(timezone.utc).isoformat()},
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Lettuce", "section_id": sections[2]["id"], "unit_of_measure": "un", "minimum_stock": 20, "average_consumption": 10, "created_at": datetime.now(timezone.utc).isoformat()},
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Onions", "section_id": sections[2]["id"], "unit_of_measure": "kg", "minimum_stock": 10, "average_consumption": 5, "created_at": datetime.now(timezone.utc).isoformat()},
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Olive Oil", "section_id": sections[3]["id"], "unit_of_measure": "l", "minimum_stock": 5, "average_consumption": 1, "created_at": datetime.now(timezone.utc).isoformat()},
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Pasta", "section_id": sections[3]["id"], "unit_of_measure": "kg", "minimum_stock": 10, "average_consumption": 3, "created_at": datetime.now(timezone.utc).isoformat()},
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Rice", "section_id": sections[3]["id"], "unit_of_measure": "kg", "minimum_stock": 15, "average_consumption": 5, "created_at": datetime.now(timezone.utc).isoformat()},
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Milk", "section_id": sections[4]["id"], "unit_of_measure": "l", "minimum_stock": 20, "average_consumption": 10, "created_at": datetime.now(timezone.utc).isoformat()},
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Butter", "section_id": sections[4]["id"], "unit_of_measure": "kg", "minimum_stock": 5, "average_consumption": 2, "created_at": datetime.now(timezone.utc).isoformat()},
-        {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": "Parmesan Cheese", "section_id": sections[4]["id"], "unit_of_measure": "kg", "minimum_stock": 3, "average_consumption": 1, "created_at": datetime.now(timezone.utc).isoformat()},
-    ]
-    await db.items.insert_many(items)
-    
-    return {"message": "Data seeded successfully", "sections": len(sections), "items": len(items)}
-
-    return {"message": "Data seeded successfully", "sections": len(sections), "items": len(items)}
-
-@api_router.post("/seed-items")
-async def seed_items_from_spreadsheet(user: dict = Depends(get_current_user)):
-    """Internal: auto-seed sections and items for a company - admin only"""
-    require_admin(user)
-    result = await auto_seed_company(user["company_id"])
-    return result
-    company_id = user["company_id"]
-
-    # Get or create sections
-    section_names = ["Stock Items", "Other Supplies", "Pizza", "Dry", "Sauces & Ready Food",
-                     "Vegetables", "Frozen", "Meat", "Dairy", "Drinks", "Packaging", "Fruit", "Melts"]
-    sections_map = {}
-    for sname in section_names:
-        sec = await db.sections.find_one({"company_id": company_id, "name": sname}, {"_id": 0})
-        if not sec:
-            sec = {"id": str(uuid.uuid4()), "company_id": company_id, "name": sname,
-                   "description": "", "icon": "Package", "created_at": datetime.now(timezone.utc).isoformat()}
-            await db.sections.insert_one(sec)
-        sections_map[sname] = sec["id"]
-
-    # All items from spreadsheet: (name, section, unit, par_by_day)
-    # par_by_day: Mon, Tue, Wed, Thu, Fri, Sat, Sun
-    ITEMS = [
-        # Stock Items
-        ("Coffee Beans", "Stock Items", "kg", [8,8,8,8,8,10,8]),
-        ("Decaf Coffee", "Stock Items", "bag", [2,2,2,2,2,2,2]),
-        ("Matcha", "Stock Items", "bag", [1,2,2,2,2,2,2]),
-        ("Chai Latte", "Stock Items", "tub", [1,1,1,1,1,1,1]),
-        ("Hot Choc Powder", "Stock Items", "tub", [1,1,1,1,2,2,1]),
-        ("Spray Cream", "Stock Items", "un", [1,2,1,1,1,2,1]),
-        ("Full Fat Milk", "Stock Items", "l", [2,4,3,4,5,6,2]),
-        ("Low Fat Milk", "Stock Items", "l", [1,1,1,1,2,2,1]),
-        ("Coconut Milk", "Stock Items", "l", [6,6,8,8,8,8,6]),
-        ("Oat Milk", "Stock Items", "l", [12,12,12,12,18,18,12]),
-        ("White Sugar", "Stock Items", "bag", [1,1,1,1,1,1,1]),
-        ("Brown Sugar", "Stock Items", "bag", [1,1,1,1,1,1,1]),
-        ("Ketchup", "Stock Items", "un", [1,1,1,1,1,1,1]),
-        ("Vinegar", "Stock Items", "btl", [1,1,1,1,1,1,1]),
-        ("Salt Sachets", "Stock Items", "pack", [1,1,1,1,1,1,1]),
-        ("Pepper Sachets", "Stock Items", "pack", [1,1,1,1,1,1,1]),
-        ("Jam", "Stock Items", "un", [1,1,1,1,1,1,1]),
-        ("Tea Bags", "Stock Items", "pack", [1,1,1,1,1,1,1]),
-        # Drinks
-        ("Coke", "Drinks", "un", [1,1,1,1,1,1,1]),
-        ("Coke Zero", "Drinks", "un", [1,1,1,1,1,2,1]),
-        ("San Pell Orange", "Drinks", "un", [1,1,1,1,1,1,1]),
-        ("Sparkling Water", "Drinks", "un", [1,1,1,1,1,1,1]),
-        ("Still Water", "Drinks", "un", [1,1,1,1,1,1,1]),
-        ("Apple Juice", "Drinks", "un", [1,1,1,1,1,1,1]),
-        ("Moretti", "Drinks", "un", [1,1,1,1,1,1,1]),
-        ("Tropical Soda", "Drinks", "un", [1,1,1,1,1,1,1]),
-        ("Lemon Soda", "Drinks", "un", [1,1,1,1,1,1,1]),
-        ("B.Orange Soda", "Drinks", "un", [1,1,1,1,1,1,1]),
-        ("Raffo", "Drinks", "un", [1,1,1,1,1,1,1]),
-        # Melts
-        ("Chicken (Melt)", "Melts", "un", [12,12,10,12,14,16,10]),
-        ("Tuna (Melt)", "Melts", "un", [5,5,5,5,6,8,4]),
-        ("Veggie (Melt)", "Melts", "un", [3,3,3,3,4,6,3]),
-        ("Ham & Cheese (Melt)", "Melts", "un", [6,6,6,6,8,10,5]),
-        ("Focaccia (Melt)", "Melts", "un", [8,8,8,8,10,12,6]),
-        ("Avo Club (Melt)", "Melts", "un", [6,6,6,6,8,10,5]),
-        # Pizza
-        ("12\" Dough", "Pizza", "un", [3,5,3,5,7,10,3]),
-        ("20\" Dough", "Pizza", "un", [2,4,2,3,5,5,2]),
-        ("Pizza Sauce", "Pizza", "un", [2,2,1,2,2,4,1]),
-        ("Pizza Mozzarella", "Pizza", "kg", [4,8,5,6,8,12,5]),
-        # Sauces & Ready Food
-        ("Veg Stock", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
-        ("Bolognese Sauce", "Sauces & Ready Food", "tray", [2,2,2,2,2,3,1]),
-        ("Napoli Sauce", "Sauces & Ready Food", "tray", [2,2,2,2,3,5,1]),
-        ("Soup", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
-        ("Green Pesto", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
-        ("Hot Honey", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
-        ("Lasagne (TRAY)", "Sauces & Ready Food", "tray", [1,1,1,1,1,1,1]),
-        ("Lasagne for 2", "Sauces & Ready Food", "un", [4,4,4,4,6,6,4]),
-        ("Dijon Dressing", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
-        ("Mayonnaise 5L", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
-        ("Vine Tomato", "Sauces & Ready Food", "un", [1,2,1,2,2,3,2]),
-        ("Sundried Tomato", "Sauces & Ready Food", "un", [1,1,1,1,2,2,1]),
-        ("Avocado (case/20)", "Sauces & Ready Food", "case", [1,1,1,1,1,1,1]),
-        ("Garlic", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
-        ("Garlic Puree", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
-        ("Chilli Peppers", "Sauces & Ready Food", "un", [6,6,6,6,6,6,6]),
-        ("Balsamic Glaze", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
-        ("Relish", "Sauces & Ready Food", "un", [1,1,1,1,1,1,1]),
-        # Vegetables
-        ("Rocket (Bag)", "Vegetables", "bag", [4,6,5,6,8,10,6]),
-        ("Spinach (Bag)", "Vegetables", "bag", [4,6,5,6,8,10,6]),
-        ("Lettuce (Bag)", "Vegetables", "bag", [4,6,6,6,8,12,6]),
-        ("Peppers (single)", "Vegetables", "un", [8,6,6,8,10,12,10]),
-        ("Red Onion (/kg)", "Vegetables", "kg", [1,1,1,1,1,2,1]),
-        ("Sweetcorn (can)", "Vegetables", "can", [2,2,2,2,2,2,2]),
-        ("Courgette", "Vegetables", "un", [4,6,4,8,8,12,6]),
-        ("Mushroom", "Vegetables", "kg", [1,1,1,2,2,2,2]),
-        # Frozen
-        ("Chips (/bag)", "Frozen", "bag", [4,6,5,6,10,12,5]),
-        ("Acai", "Frozen", "un", [3,3,3,3,4,5,3]),
-        ("Peas (Frozen)", "Frozen", "bag", [1,1,1,1,1,1,1]),
-        ("Vanilla Ice Cream", "Frozen", "un", [1,1,1,1,1,1,1]),
-        ("Prawns", "Frozen", "kg", [1,1,1,2,2,3,1]),
-        ("Diced Chicken Bags", "Frozen", "bag", [1,3,1,2,3,6,1]),
-        ("Breakfast Bacon", "Frozen", "kg", [1,1,1,1,1,2,1]),
-        ("French Toast", "Frozen", "un", [1,1,1,1,1,2,1]),
-        ("Ice (Bag)", "Frozen", "bag", [1,2,2,2,5,3,1]),
-        # Dry
-        ("Olive Oil", "Dry", "btl", [1,2,1,2,2,3,1]),
-        ("Oil Spray", "Dry", "un", [1,1,1,1,1,1,1]),
-        ("Honey (/btl)", "Dry", "btl", [1,1,1,1,1,1,1]),
-        ("Chia Seed", "Dry", "un", [1,1,1,1,1,1,1]),
-        ("Chilli Oil", "Dry", "btl", [1,1,1,1,1,1,1]),
-        ("Salt (bucket)", "Dry", "un", [1,1,1,1,1,1,1]),
-        ("Cooking White Wine", "Dry", "btl", [1,1,1,1,1,2,1]),
-        ("Bread", "Dry", "un", [5,6,6,6,8,10,4]),
-        ("Egg Yolk", "Dry", "un", [1,1,1,1,1,2,1]),
-        ("Peanut Butter (bucket)", "Dry", "un", [2,2,2,2,2,3,2]),
-        ("Penne (/5kg)", "Dry", "bag", [2,2,2,2,2,3,1]),
-        ("Spaghetti (/5kg)", "Dry", "bag", [2,2,2,2,2,2,1]),
-        ("Gluten Free Penne (/400g)", "Dry", "bag", [2,2,2,2,2,4,2]),
-        ("Granola", "Dry", "un", [1,1,1,1,1,1,1]),
-        ("Focaccia Bread", "Dry", "un", [1,1,2,2,2,4,1]),
-        ("Flour", "Dry", "kg", [1,1,1,1,1,1,1]),
-        ("Dry Funghi", "Dry", "un", [1,1,1,1,1,1,1]),
-        ("Kinder Bueno", "Dry", "un", [1,1,1,1,1,1,1]),
-        ("Nutella", "Dry", "un", [1,1,1,1,1,1,1]),
-        ("Biscoff Biscuits", "Dry", "pack", [1,1,1,1,1,1,1]),
-        # Meat
-        ("Sausages (/kg)", "Meat", "kg", [2,3,3,4,5,6,2]),
-        ("Black Pudding (box)", "Meat", "box", [1,1,1,1,2,2,1]),
-        ("Pepperoni (/pack)", "Meat", "pack", [4,5,3,4,6,8,4]),
-        ("Parma Ham (/tray 500g)", "Meat", "tray", [2,2,2,2,2,3,1]),
-        ("Nduja", "Meat", "un", [1,1,1,1,1,1,1]),
-        ("Goujons (/kg)", "Meat", "kg", [2,2,2,2,2,3,2]),
-        ("Pancetta (/kg)", "Meat", "kg", [6,7,5,6,8,10,4]),
-        ("Ham", "Meat", "kg", [1,2,1,2,2,3,1]),
-        # Dairy
-        ("Butter 454g", "Dairy", "un", [1,1,1,1,1,1,1]),
-        ("Cream", "Dairy", "l", [6,8,6,8,10,12,4]),
-        ("Parmesan 1kg", "Dairy", "kg", [3,4,4,5,8,10,4]),
-        ("Parmesan Shaving (/kg)", "Dairy", "kg", [1,1,1,1,1,1,1]),
-        ("Straciatella", "Dairy", "un", [4,6,4,6,10,12,5]),
-        ("Buffalo Mozzarella", "Dairy", "un", [3,5,3,3,5,6,4]),
-        # Fruit
-        ("Pineapple (1 can)", "Fruit", "can", [2,2,2,2,2,2,2]),
-        ("Banana (pcs)", "Fruit", "un", [10,10,8,10,12,20,8]),
-        ("Blueberry", "Fruit", "un", [4,4,4,4,6,8,3]),
-        ("Strawberry", "Fruit", "un", [6,8,4,6,10,12,4]),
-        ("Lemon (/pcs)", "Fruit", "un", [10,10,10,10,10,20,10]),
-        # Other Supplies
-        ("D9 (Grill & Oven)", "Other Supplies", "un", [1,1,1,1,1,1,1]),
-        ("D5 (Descaler)", "Other Supplies", "un", [1,1,1,1,1,1,1]),
-        ("D10", "Other Supplies", "un", [1,1,1,1,1,1,1]),
-        ("Degreaser", "Other Supplies", "un", [1,1,1,1,1,1,1]),
-        ("Gloves L", "Other Supplies", "pack", [2,2,2,2,2,2,2]),
-        ("Heavy Duty Gloves", "Other Supplies", "pack", [2,2,2,2,2,2,2]),
-        ("Kitchen Printer Inks", "Other Supplies", "un", [2,2,2,3,2,2,2]),
-        ("Pot Scrub", "Other Supplies", "un", [1,1,1,1,1,1,1]),
-        ("Rinse Clear", "Other Supplies", "un", [1,1,1,1,1,1,1]),
-        ("Blue Roll", "Other Supplies", "roll", [1,1,1,1,1,2,1]),
-        ("Soap", "Other Supplies", "un", [1,1,1,1,1,1,1]),
-        ("Sponge", "Other Supplies", "un", [1,1,1,1,1,1,1]),
-        ("Suma Combi+", "Other Supplies", "un", [1,1,1,1,1,1,1]),
-        ("Fairy Liquid", "Other Supplies", "un", [1,1,1,1,1,1,1]),
-        ("Glass Cleaner", "Other Supplies", "un", [1,1,1,1,1,1,1]),
-        ("Cif", "Other Supplies", "un", [1,1,1,1,1,1,1]),
-        ("Toilet Paper", "Other Supplies", "roll", [1,1,1,1,1,1,1]),
-        ("Kitchen Printer Roll", "Other Supplies", "roll", [3,1,6,6,6,6,1]),
-        ("Tin Foil", "Other Supplies", "un", [1,1,1,1,1,1,1]),
-        ("Bin Bags (Black)", "Other Supplies", "pack", [1,1,1,1,1,1,1]),
-        ("Bin Bags (Clear)", "Other Supplies", "pack", [1,1,1,1,1,1,1]),
-        # Packaging
-        ("12\" Boxes", "Packaging", "pack", [1,1,1,1,1,1,1]),
-        ("20\" Boxes", "Packaging", "pack", [1,1,1,1,1,1,1]),
-        ("Small Foil Cont+Lids", "Packaging", "pack", [1,1,1,1,1,1,1]),
-        ("Burger Box Sml", "Packaging", "pack", [1,1,2,2,2,3,1]),
-        ("Burger Box Lge", "Packaging", "pack", [1,1,1,1,2,2,1]),
-        ("Chip Bags", "Packaging", "pack", [1,1,1,1,1,1,1]),
-        ("2oz cups+lids", "Packaging", "pack", [1,1,1,1,3,2,1]),
-        ("Pasta Cont+Lids", "Packaging", "pack", [3,3,3,4,5,6,4]),
-        ("Clear Pasta Cont", "Packaging", "pack", [1,1,1,1,2,2,4]),
-        ("Small Salad Cont", "Packaging", "pack", [1,1,1,1,1,1,1]),
-        ("Large Salad Cont", "Packaging", "pack", [1,1,1,1,1,1,1]),
-        ("Salad Cont Lids", "Packaging", "pack", [1,1,1,1,1,1,1]),
-        ("T/A Forks", "Packaging", "pack", [1,1,1,1,1,1,1]),
-        ("T/A Knives", "Packaging", "pack", [1,1,1,1,1,1,1]),
-        ("T/A Spoons", "Packaging", "pack", [1,1,1,1,1,1,1]),
-        ("Wooden Stirers", "Packaging", "pack", [1,1,1,1,1,1,1]),
-        ("Napkins (/pack)", "Packaging", "pack", [2,2,2,2,3,3,2]),
-        ("12oz Cups", "Packaging", "pack", [6,6,6,6,6,8,6]),
-        ("8oz cups", "Packaging", "pack", [3,3,3,3,3,4,3]),
-        ("12oz Lids", "Packaging", "pack", [2,2,2,2,2,3,2]),
-        ("8oz Lids", "Packaging", "pack", [1,1,1,1,1,2,1]),
-    ]
-
-    days_keys = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"]
-    created = 0
-    skipped = 0
-
-    for (name, section_name, unit, pars) in ITEMS:
-        sec_id = sections_map.get(section_name)
-        if not sec_id:
-            continue
-        # Skip if already exists
-        existing = await db.items.find_one({"company_id": company_id, "name": {"$regex": f"^{name}$", "$options": "i"}}, {"_id": 0})
-        if existing:
-            skipped += 1
-            continue
-        avg_par = round(sum(pars) / 7, 1)
-        par_by_day = {days_keys[i]: pars[i] for i in range(7)}
-        item_doc = {
-            "id": str(uuid.uuid4()),
-            "company_id": company_id,
-            "name": name,
-            "section_id": sec_id,
-            "unit_of_measure": unit,
-            "minimum_stock": avg_par,
-            "minimum_stock_by_day": par_by_day,
-            "average_consumption": avg_par,
-            "item_type": "all",
-            "visible_in_units": [],
-            "show_in_reports": True,
-            "price": 0.0,
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }
-        await db.items.insert_one(item_doc)
-        created += 1
-
-    return {"message": f"Seed complete: {created} items created, {skipped} already existed", "created": created, "skipped": skipped}
-
-# ==================== DAILY PREP CHECKLIST ====================
-
-DEFAULT_PREP_ITEMS = [
-    # Foto da lista de prep
-    "Tomatoes", "Mushroom", "Onion", "Chicken", "Sausage",
-    "Pasta (Spag, Penne)", "Lemon Juice", "Courgette", "Garlic Mayo",
-    "Dips", "Garlic Oil", "Balsamic Dressing", "Lasagne", "Peppers",
-    "Pomodoro", "Ravioli", "Pizza Box", "Avocado", "Bacon", "Eggs",
-    "Parsley", "Gamberi Mix", "Pancetta", "Ham", "Butter", "Pesto Mayo",
-    # Planilha - Stock Items
-    "Coffee Beans", "Decaf Coffee", "Matcha", "Chai Latte", "Hot Choc Powder",
-    "Spray Cream", "Full Fat Milk", "Low Fat Milk", "Coconut Milk", "Oat Milk",
-    "White Sugar", "Brown Sugar", "Canderel", "Ketchup", "Vinegar",
-    "Salt Sachets", "Pepper Sachets", "Jam",
-    # Planilha - Drinks
-    "Coke", "Coke Zero", "San Pell Orange", "Sparkling Water", "Still Water",
-    "Apple Juice", "Moretti", "Tropical Soda", "Lemon Soda", "B.Orange Soda", "Raffo",
-    # Planilha - Melts
-    "Chicken (Melt)", "Tuna (Melt)", "Veggie (Melt)", "Ham & Cheese (Melt)",
-    "Focaccia (Melt)", "Avo Club (Melt)",
-    # Planilha - Pizza
-    "12\" Dough", "20\" Dough", "Pizza Sauce", "Pizza Mozzarella",
-    # Planilha - Sauces & Ready Food
-    "Veg Stock", "Bolognese Sauce", "Napoli Sauce", "Soup", "Green Pesto",
-    "Hot Honey", "Lasagne (TRAY)", "Dijon Dressing", "Mayonnaise 5L",
-    "Vine Tomato", "Sundried Tomato", "Avocado (case/20)", "Garlic",
-    "Garlic Puree", "Chilli Peppers", "Lasagne for 2",
-    # Planilha - Vegetables
-    "Rocket (Bag)", "Spinach (Bag)", "Lettuce (Bag)", "Peppers (single)",
-    "Red Onion (/kg)", "Sweetcorn (can)", "Courgette (fresh)", "Mushroom (fresh)",
-    # Planilha - Frozen
-    "Chips (/bag)", "Acai", "Peas (Frozen)", "Vanilla Ice Cream", "Prawns",
-    "Diced Chicken Bags", "Breakfast Bacon", "French Toast", "Ice (Bag)",
-    # Planilha - Dry
-    "Olive Oil", "Oil Spray", "Honey (/btl)", "Chia Seed", "Chilli Oil",
-    "Salt (bucket)", "Cooking White Wine", "Balsamic Glaze", "Relish",
-    "Bread", "Egg Yolk", "Peanut Butter (bucket)", "Penne (/5kg)",
-    "Spaghetti (/5kg)", "Gluten Free Penne (/400g)", "Granola",
-    "Focaccia Bread", "Flour", "Dry Funghi", "Kinder Bueno", "Nutella",
-    "Biscoff Biscuits",
-    # Planilha - Meat
-    "Sausages (/kg)", "Black Pudding (box)", "Pepperoni (/pack)",
-    "Parma Ham (/tray 500g)", "Nduja", "Goujons (/kg)", "Pancetta (/kg)",
-    # Planilha - Dairy
-    "Pizza Mozzarella", "Butter 454g", "Cream", "Parmesan 1kg",
-    "Parmesan Shaving (/kg)", "Straciatella",
-    # Planilha - Fruit
-    "Pineapple (1 can)", "Banana (pcs)",
-    # Planilha - Other Supplies
-    "D9 (Grill & Oven)", "D5 (Descaler)", "D10", "Degreaser",
-    "Gloves L", "Heavy Duty Gloves", "Kitchen Printer Inks",
-    "Pot Scrub", "Rinse Clear", "Blue Roll", "Soap", "Sponge",
-    "Suma Combi+", "Fairy Liquid", "Glass Cleaner", "Cif",
-    "Toilet Paper", "Kitchen Printer Roll", "Tin Foil",
-    "Bin Bags (Black)", "Bin Bags (Clear)",
-    # Planilha - Packaging
-    "12\" Boxes", "20\" Boxes", "Small Foil Cont+Lids", "Burger Box Sml",
-    "Burger Box Lge", "Chip Bags", "2oz cups+lids", "Pasta Cont+Lids",
-    "Clear Pasta Cont", "Small Salad Cont", "Large Salad Cont",
-    "Salad Cont Lids", "T/A Forks", "T/A Knives", "T/A Spoons",
-    "Wooden Stirers", "Napkins (/pack)", "12oz Cups", "8oz cups",
-    "12oz Lids", "8oz Lids",
-]
-
-class PrepItemCreate(BaseModel):
-    name: str
-    unit_id: Optional[str] = ""
-
-class PrepCheckUpdate(BaseModel):
-    status: str  # "pending", "done", "dont_need"
-    done_by: str = ""
-    unit_id: Optional[str] = ""  # unit where this check is being made
-
-@api_router.get("/prep/items")
-async def get_prep_items(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
-    """Get prep items. Each unit has fully independent items — strictly filter by unit_id."""
-    if unit_id:
-        # Strict: only items that belong to this exact unit
-        items = await db.prep_items.find(
-            {"company_id": user["company_id"], "unit_id": unit_id},
-            {"_id": 0}
-        ).sort("order", 1).to_list(200)
-    else:
-        items = await db.prep_items.find(
-            {"company_id": user["company_id"]}, {"_id": 0}
-        ).sort("order", 1).to_list(200)
-    return items
-
-@api_router.post("/prep/items")
-async def add_prep_item(item: PrepItemCreate, user: dict = Depends(get_current_user)):
-    """Add a new prep item - admin only"""
-    require_admin(user)
-    count = await db.prep_items.count_documents({"company_id": user["company_id"]})
-    doc = {
-        "id": str(uuid.uuid4()),
-        "company_id": user["company_id"],
-        "unit_id": item.unit_id or "",
-        "name": item.name,
-        "order": count,
-        "active": True,
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.prep_items.insert_one(doc)
-    doc.pop("_id", None)
-    return doc
-
-@api_router.delete("/prep/items/{item_id}")
-async def delete_prep_item(item_id: str, unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
-    """Delete a prep item - admin only. If unit_id provided, only deletes items belonging to that unit."""
-    require_admin(user)
-    query = {"id": item_id, "company_id": user["company_id"]}
-    if unit_id:
-        query["unit_id"] = unit_id
-    result = await db.prep_items.delete_one(query)
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Item not found or does not belong to this unit")
-    return {"message": "Item deleted"}
-
-
-@api_router.get("/prep/today")
-async def get_today_checklist(unit_id: Optional[str] = None, user: dict = Depends(get_current_user)):
-    """Get today's checklist status for the unit"""
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    query = {"company_id": user["company_id"], "date": today}
-    if unit_id:
-        query["unit_id"] = unit_id
-    checks = await db.prep_checks.find(query, {"_id": 0}).to_list(200)
-    return checks
-
-@api_router.put("/prep/today/{item_id}")
-async def update_today_check(item_id: str, update: PrepCheckUpdate, user: dict = Depends(get_current_user)):
-    """Update the status of a prep item for today"""
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    # Use unit_id from request body (most reliable), fallback to prep_item
-    item_unit_id = update.unit_id or ""
-    if not item_unit_id:
-        prep_item = await db.prep_items.find_one({"id": item_id, "company_id": user["company_id"]}, {"_id": 0})
-        item_unit_id = prep_item.get("unit_id", "") if prep_item else ""
-    existing = await db.prep_checks.find_one(
-        {"company_id": user["company_id"], "date": today, "item_id": item_id}
-    )
-    if existing:
-        await db.prep_checks.update_one(
-            {"company_id": user["company_id"], "date": today, "item_id": item_id},
-            {"$set": {
-                "status": update.status,
-                "done_by": update.done_by,
-                "unit_id": item_unit_id,
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }}
-        )
-    else:
-        await db.prep_checks.insert_one({
-            "id": str(uuid.uuid4()),
-            "company_id": user["company_id"],
-            "unit_id": item_unit_id,
-            "date": today,
-            "item_id": item_id,
-            "status": update.status,
-            "done_by": update.done_by,
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        })
-    return {"message": "Updated"}
-
-@api_router.get("/prep/history")
-async def get_prep_history(unit_id: Optional[str] = None, user: dict = Depends(get_current_user), days: int = 7):
-    """Get prep history for the last N days"""
-    from datetime import timedelta
-    dates = [
-        (datetime.now(timezone.utc) - timedelta(days=i)).strftime("%Y-%m-%d")
-        for i in range(1, days + 1)
-    ]
-    history = []
-    for date in dates:
-        query = {"company_id": user["company_id"], "date": date}
-        if unit_id:
-            query["unit_id"] = unit_id
-        checks = await db.prep_checks.find(query, {"_id": 0}).to_list(200)
-        if checks:
-            done = sum(1 for c in checks if c["status"] == "done")
-            dont_need = sum(1 for c in checks if c["status"] == "dont_need")
-            total = done + dont_need
-            history.append({
-                "date": date,
-                "checks": checks,
-                "done": done,
-                "dont_need": dont_need,
-                "total_completed": total
-            })
-    return history
-
-@api_router.post("/seed-sections")
-async def seed_sections_compat(user: dict = Depends(get_current_user)):
-    """Compatibility route - now handled by auto_seed_company"""
-    require_admin(user)
-    result = await auto_seed_company(user["company_id"])
-    return result
-
-@api_router.post("/fix-items-team")
-async def fix_items_team(user: dict = Depends(get_current_user)):
-    """Update team field for all items based on LACUCINA_ITEMS list - admin only"""
-    require_admin(user)
-    company_id = user["company_id"]
-    team_map = {name: team for (name, _, team, _) in LACUCINA_ITEMS}
-    updated = 0
-    for name, team in team_map.items():
-        result = await db.items.update_many(
-            {"company_id": company_id, "name": {"$regex": f"^{name}$", "$options": "i"}, "team": {"$in": ["", None]}},
-            {"$set": {"team": team}}
-        )
-        updated += result.modified_count
-    return {"message": f"Updated team for {updated} items"}
-
-# ==================== DAILY WASTE ====================
-
-class WasteReasonCreate(BaseModel):
-    name: str  # e.g. "Old", "Overgrown", "Mistake", "Overdate"
-
-class WasteEntryCreate(BaseModel):
-    item_id: str
-    item_name: str
-    quantity: float
-    unit_of_measure: str = "un"
-    reason_id: str
-    reason_name: str
-    notes: str = ""
-    initials: str
-    unit_id: Optional[str] = ""  # Which unit this waste was recorded in = ""
-
-@api_router.get("/waste/reasons")
-async def get_waste_reasons(user: dict = Depends(get_current_user)):
-    reasons = await db.waste_reasons.find({"company_id": user["company_id"]}, {"_id": 0}).sort("name", 1).to_list(100)
-    if not reasons:
-        # Seed default reasons
-        defaults = ["Old", "Overgrown", "Mistake", "Overdate", "Broken", "Contaminated", "Other"]
-        docs = [{"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": n,
-                 "created_at": datetime.now(timezone.utc).isoformat()} for n in defaults]
-        await db.waste_reasons.insert_many(docs)
-        reasons = [{k: v for k, v in d.items() if k != "_id"} for d in docs]
-    return reasons
-
-@api_router.post("/waste/reasons")
-async def create_waste_reason(reason: WasteReasonCreate, user: dict = Depends(get_current_user)):
-    require_admin(user)
-    doc = {"id": str(uuid.uuid4()), "company_id": user["company_id"], "name": reason.name,
-           "created_at": datetime.now(timezone.utc).isoformat()}
-    await db.waste_reasons.insert_one(doc)
-    doc.pop("_id", None)
-    return doc
-
-@api_router.delete("/waste/reasons/{reason_id}")
-async def delete_waste_reason(reason_id: str, user: dict = Depends(get_current_user)):
-    require_admin(user)
-    await db.waste_reasons.delete_one({"id": reason_id, "company_id": user["company_id"]})
-    return {"message": "Deleted"}
-
-@api_router.post("/waste/entries")
-async def create_waste_entry(entry: WasteEntryCreate, user: dict = Depends(get_current_user)):
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    doc = {
-        "id": str(uuid.uuid4()),
-        "company_id": user["company_id"],
-        "unit_id": entry.unit_id or "",
-        "date": today,
-        "item_id": entry.item_id,
-        "item_name": entry.item_name,
-        "quantity": entry.quantity,
-        "unit_of_measure": entry.unit_of_measure,
-        "reason_id": entry.reason_id,
-        "reason_name": entry.reason_name,
-        "notes": entry.notes,
-        "initials": entry.initials,
-        "recorded_by": user.get("name", ""),
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.waste_entries.insert_one(doc)
-    doc.pop("_id", None)
-    return doc
-
-@api_router.get("/waste/entries")
-async def get_waste_entries(unit_id: Optional[str] = None, user: dict = Depends(get_current_user), days: int = 30):
-    from datetime import timedelta
-    since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
-    query = {"company_id": user["company_id"], "date": {"$gte": since}}
-    if unit_id:
-        query["unit_id"] = unit_id
-    entries = await db.waste_entries.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
-    return entries
-
-@api_router.delete("/waste/entries/{entry_id}")
-async def delete_waste_entry(entry_id: str, user: dict = Depends(get_current_user)):
-    require_admin(user)
-    await db.waste_entries.delete_one({"id": entry_id, "company_id": user["company_id"]})
-    return {"message": "Deleted"}
-
-# ==================== ROOT ====================
-
-@api_router.post("/admin/migrate-unit-ids")
-async def migrate_unit_ids(user: dict = Depends(get_current_user)):
-    """One-time migration: assign unit_id to documents missing it."""
-    require_admin(user)
-    company_id = user["company_id"]
-    first_unit = await db.units.find_one({"company_id": company_id}, {"_id": 0})
-    if not first_unit:
-        return {"message": "No units found"}
-    unit_id = first_unit["id"]
-    results = {}
-    r1 = await db.prep_items.update_many(
-        {"company_id": company_id, "unit_id": {"$in": ["", None]}},
-        {"$set": {"unit_id": unit_id}}
-    )
-    results["prep_items"] = r1.modified_count
-    r2 = await db.prep_checks.update_many(
-        {"company_id": company_id, "unit_id": {"$in": ["", None]}},
-        {"$set": {"unit_id": unit_id}}
-    )
-    results["prep_checks"] = r2.modified_count
-    r3 = await db.waste_entries.update_many(
-        {"company_id": company_id, "unit_id": {"$in": ["", None]}},
-        {"$set": {"unit_id": unit_id}}
-    )
-    results["waste_entries"] = r3.modified_count
-    r4 = await db.stock_entries.update_many(
-        {"unit_id": {"$in": ["", None]}, "company_id": company_id},
-        {"$set": {"unit_id": unit_id}}
-    )
-    results["stock_entries"] = r4.modified_count
-    return {"message": f"Migration done for unit {first_unit['name']}", "updated": results}
+    return await get_store_settings(user["company_id"])
 
 @api_router.get("/")
 async def root():
-    return {"message": "Kitchen Inventory API", "version": "2.0.0"}
+    return {"message": "Vape Store API", "version": "3.0.0"}
 
 # Include router and middleware
 app.include_router(api_router)

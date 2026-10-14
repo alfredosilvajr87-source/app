@@ -1,4 +1,4 @@
-const CACHE = 'kitchen-pro-v2';
+const CACHE = 'vape-store-v1';
 const OFFLINE_URL = '/';
 
 const PRECACHE = [

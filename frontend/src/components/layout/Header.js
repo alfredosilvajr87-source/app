@@ -1,24 +1,23 @@
 import { useAuth } from '../../context/AuthContext';
-import { useUnit } from '../../context/UnitContext';
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 import BACKEND_URL from '../../config';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
-import { Button } from '../ui/button';
 import {
-  Building2, ChevronDown, LogOut, ChefHat, Shield,
-  Sun, Moon, User, AlertTriangle, Package, ShoppingCart,
+  ChevronDown, LogOut, Store, Shield,
+  Sun, Moon, AlertTriangle, Package,
 } from 'lucide-react';
 import { API_URL as API } from '../../config';
 
 const Header = ({ onMenuClick }) => {
   const { user, company, logout, isAdmin } = useAuth();
-  const { units, currentUnit, selectUnit } = useUnit();
+  const location = useLocation();
   const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') === 'dark');
-  const [kpis, setKpis] = useState({ total: 0, critical: 0, pending_orders: 0 });
+  const [kpis, setKpis] = useState({ units: 0, low: 0 });
 
   useEffect(() => {
     if (isDark) {
@@ -31,23 +30,22 @@ const Header = ({ onMenuClick }) => {
   }, [isDark]);
 
   useEffect(() => {
-    if (currentUnit) fetchKpis();
-  }, [currentUnit]); // eslint-disable-line
+    fetchKpis();
+  }, [location.pathname]); // eslint-disable-line
 
   const fetchKpis = async () => {
     try {
-      const [stockRes, ordersRes] = await Promise.all([
-        axios.get(`${API}/reports/stock-status/${currentUnit.id}`),
-        axios.get(`${API}/orders/${currentUnit.id}?status=pending`),
-      ]);
-      const critical = stockRes.data.filter(i => i.status === 'critical').length;
-      setKpis({ total: stockRes.data.length, critical, pending_orders: ordersRes.data.length });
+      const res = await axios.get(`${API}/products`, { params: { include_inactive: false } });
+      setKpis({
+        units: res.data.reduce((sum, p) => sum + p.stock, 0),
+        low: res.data.filter((p) => p.stock <= p.min_stock).length,
+      });
     } catch { /* silent */ }
   };
 
-  const initials = company?.name
-    ? company.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-    : 'KP';
+  const initials = user?.name
+    ? user.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    : 'VS';
 
   return (
     <header className="dark-header">
@@ -66,11 +64,11 @@ const Header = ({ onMenuClick }) => {
             />
           ) : (
             <div className="dark-header-logo-icon">
-              <ChefHat className="h-4 w-4 text-white" />
+              <Store className="h-4 w-4 text-white" />
             </div>
           )}
           <div className="dark-header-company-info">
-            <span className="dark-header-company-name">{company?.name || 'Kitchen Pro'}</span>
+            <span className="dark-header-company-name">{company?.name || 'Vape Store'}</span>
             {isAdmin && (
               <span className="dark-header-admin-badge">
                 <Shield className="h-2.5 w-2.5" /> Admin
@@ -81,67 +79,27 @@ const Header = ({ onMenuClick }) => {
       </div>
 
       {/* Center: KPI chips */}
-      {currentUnit && (
-        <div className="dark-header-kpis">
-          <div className="dark-kpi-chip">
-            <Package className="h-3 w-3 text-slate-400" />
-            <span className="dark-kpi-val">{kpis.total}</span>
-            <span className="dark-kpi-lbl">items</span>
-          </div>
-          {kpis.critical > 0 && (
-            <div className="dark-kpi-chip dark-kpi-chip--danger">
-              <AlertTriangle className="h-3 w-3" />
-              <span className="dark-kpi-val">{kpis.critical}</span>
-              <span className="dark-kpi-lbl">critical</span>
-            </div>
-          )}
-          {kpis.pending_orders > 0 && (
-            <div className="dark-kpi-chip dark-kpi-chip--info">
-              <ShoppingCart className="h-3 w-3" />
-              <span className="dark-kpi-val">{kpis.pending_orders}</span>
-              <span className="dark-kpi-lbl">orders</span>
-            </div>
-          )}
+      <div className="dark-header-kpis">
+        <div className="dark-kpi-chip">
+          <Package className="h-3 w-3 text-slate-400" />
+          <span className="dark-kpi-val">{kpis.units}</span>
+          <span className="dark-kpi-lbl">em estoque</span>
         </div>
-      )}
-
-      {/* Right: unit selector + theme + user */}
-      <div className="dark-header-right">
-        {/* Unit selector */}
-        {units.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="dark-unit-btn">
-                <Building2 className="h-3.5 w-3.5" />
-                <span>{currentUnit?.name || 'Select'}</span>
-                {currentUnit?.initials && <span className="dark-unit-initials">{currentUnit.initials}</span>}
-                <ChevronDown className="h-3 w-3 opacity-60" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuLabel>Switch Unit</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {units.map(unit => (
-                <DropdownMenuItem
-                  key={unit.id}
-                  onClick={() => selectUnit(unit)}
-                  className={currentUnit?.id === unit.id ? 'bg-slate-100' : ''}
-                >
-                  <Building2 className="h-4 w-4 mr-2 text-slate-500" />
-                  {unit.name}
-                  <span className="ml-auto text-xs text-slate-400">{unit.initials}</span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+        {kpis.low > 0 && (
+          <div className="dark-kpi-chip dark-kpi-chip--danger">
+            <AlertTriangle className="h-3 w-3" />
+            <span className="dark-kpi-val">{kpis.low}</span>
+            <span className="dark-kpi-lbl">repor</span>
+          </div>
         )}
+      </div>
 
-        {/* Dark mode toggle */}
-        <button className="dark-icon-btn" onClick={() => setIsDark(v => !v)} title="Toggle theme">
+      {/* Right: theme + user */}
+      <div className="dark-header-right">
+        <button className="dark-icon-btn" onClick={() => setIsDark(v => !v)} title="Alternar tema">
           {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
 
-        {/* User menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="dark-user-btn">
@@ -160,7 +118,7 @@ const Header = ({ onMenuClick }) => {
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout} className="text-red-600 focus:text-red-600">
               <LogOut className="h-4 w-4 mr-2" />
-              Sign Out
+              Sair
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -1,20 +1,16 @@
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
-import { UnitProvider } from "./context/UnitContext";
+import { StoreProvider } from "./context/StoreContext";
 import { Toaster } from "./components/ui/sonner";
 import Layout from "./components/layout/Layout";
 import LoginPage from "./pages/LoginPage";
 import Dashboard from "./pages/Dashboard";
-import SectionsPage from "./pages/SectionsPage";
-import ItemsPage from "./pages/ItemsPage";
-import DailyEntryPage from "./pages/DailyEntryPage";
-import OrdersPage from "./pages/OrdersPage";
-import ReportsPage from "./pages/ReportsPage";
+import ProductsPage from "./pages/ProductsPage";
+import PurchasesPage from "./pages/PurchasesPage";
+import SalesPage from "./pages/SalesPage";
 import SettingsPage from "./pages/SettingsPage";
 import UsersPage from "./pages/UsersPage";
-import DailyPrepPage from "./pages/DailyPrepPage";
-import DailyWastePage from "./pages/DailyWastePage";
 import MasterPage from "./pages/MasterPage";
 
 const ProtectedRoute = ({ children }) => {
@@ -25,7 +21,7 @@ const ProtectedRoute = ({ children }) => {
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center gap-4">
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-slate-900" />
-          <p className="text-slate-500 font-medium">Loading...</p>
+          <p className="text-slate-500 font-medium">Carregando...</p>
         </div>
       </div>
     );
@@ -95,28 +91,17 @@ const AppRoutes = () => {
         path="/"
         element={
           <ProtectedRoute>
-            <UnitProvider>
+            <StoreProvider>
               <Layout />
-            </UnitProvider>
+            </StoreProvider>
           </ProtectedRoute>
         }
       >
         <Route index element={<Dashboard />} />
-        <Route path="sections" element={<SectionsPage />} />
-        <Route path="items" element={<ItemsPage />} />
-        <Route path="daily-entry" element={<DailyEntryPage />} />
-        <Route path="daily-prep" element={<DailyPrepPage />} />
-        <Route path="daily-waste" element={<DailyWastePage />} />
-        <Route path="orders" element={<OrdersPage />} />
-        {/* Reports e Users: somente Admin */}
-        <Route
-          path="reports"
-          element={
-            <AdminRoute>
-              <ReportsPage />
-            </AdminRoute>
-          }
-        />
+        <Route path="products" element={<ProductsPage />} />
+        <Route path="purchases" element={<PurchasesPage />} />
+        <Route path="sales" element={<SalesPage />} />
+        {/* Users: somente Admin */}
         <Route
           path="users"
           element={

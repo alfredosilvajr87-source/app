@@ -4,15 +4,11 @@ import { cn } from '../../lib/utils';
 import {
   LayoutDashboard,
   Package,
-  ClipboardList,
-  CheckSquare,
-  AlertTriangle,
-  ShoppingCart,
-  BarChart3,
+  Receipt,
+  Truck,
   Settings,
-  ChefHat,
+  Store,
   ChevronLeft,
-  Layers,
   Users,
   Lock
 } from 'lucide-react';
@@ -23,25 +19,21 @@ const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {
   const { isAdmin } = useAuth();
 
   const navItems = [
-    { path: '/',            label: 'Dashboard',   icon: LayoutDashboard },
-    { path: '/sections',    label: 'Sections',    icon: Layers,        adminOnly: true },
-    { path: '/items',       label: 'Items',       icon: Package,       adminOnly: true },
-    { path: '/daily-entry', label: 'Daily Entry', icon: ClipboardList },
-    { path: '/daily-prep',  label: 'Daily Prep',  icon: CheckSquare },
-    { path: '/daily-waste', label: 'Daily Waste', icon: AlertTriangle },
-    { path: '/orders',      label: 'Orders',      icon: ShoppingCart },
-    { path: '/reports',     label: 'Reports',     icon: BarChart3,     adminOnly: true },
-    { path: '/users',       label: 'Users',       icon: Users,         adminOnly: true },
-    { path: '/settings',    label: 'Settings',    icon: Settings },
+    { path: '/',          label: 'Painel',        icon: LayoutDashboard },
+    { path: '/sales',     label: 'Vendas',        icon: Receipt },
+    { path: '/purchases', label: 'Compras',       icon: Truck },
+    { path: '/products',  label: 'Produtos',      icon: Package },
+    { path: '/users',     label: 'Usuários',      icon: Users,     adminOnly: true },
+    { path: '/settings',  label: 'Configurações', icon: Settings },
   ];
 
   // Bottom nav items (mobile) — most used by staff
   const bottomNavItems = [
-    { path: '/',            label: 'Home',    icon: LayoutDashboard },
-    { path: '/daily-entry', label: 'Entry',   icon: ClipboardList },
-    { path: '/daily-prep',  label: 'Prep',    icon: CheckSquare },
-    { path: '/orders',      label: 'Orders',  icon: ShoppingCart },
-    { path: '/daily-waste', label: 'Waste',   icon: AlertTriangle },
+    { path: '/',          label: 'Painel',   icon: LayoutDashboard },
+    { path: '/sales',     label: 'Vendas',   icon: Receipt },
+    { path: '/purchases', label: 'Compras',  icon: Truck },
+    { path: '/products',  label: 'Produtos', icon: Package },
+    { path: '/settings',  label: 'Config.',  icon: Settings },
   ];
 
   return (
@@ -63,14 +55,14 @@ const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {
         <div className="sidebar-logo-area">
           <div className="flex items-center gap-3">
             <div className="sidebar-logo-icon flex-shrink-0">
-              <ChefHat className="h-5 w-5 text-white" />
+              <Store className="h-5 w-5 text-white" />
             </div>
             {!collapsed && (
               <div className="overflow-hidden">
                 <h1 className="font-heading text-base font-black tracking-tight text-white">
-                  Kitchen Pro
+                  Vape Store
                 </h1>
-                <p className="text-xs text-slate-500">Inventory</p>
+                <p className="text-xs text-slate-500">Estoque e vendas</p>
               </div>
             )}
           </div>

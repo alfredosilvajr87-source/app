@@ -1,302 +1,221 @@
 import { useState, useEffect } from 'react';
-import { useUnit } from '../context/UnitContext';
 import axios from 'axios';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useStore } from '../context/StoreContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
-import { Link } from 'react-router-dom';
 import {
-  Package,
-  ShoppingCart,
-  TrendingUp
+  Package, Receipt, Truck, TrendingUp, Wallet, AlertTriangle, FileText, Sparkles,
 } from 'lucide-react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell
-} from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { apiError, formatDateTime, openInvoice, tzOffset } from '../lib/store';
 
 import { API_URL as API } from '../config';
 
+const Kpi = ({ label, value, sub, icon: Icon, tone }) => (
+  <Card className="kpi-card animate-fade-in">
+    <div className="flex items-start justify-between">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-slate-500">{label}</p>
+        <p className={`font-heading text-2xl font-bold mt-1 truncate ${tone}`}>{value}</p>
+      </div>
+      <div className="p-2 bg-slate-100 rounded-lg">
+        <Icon className="h-5 w-5 text-slate-600" />
+      </div>
+    </div>
+    {sub && <p className="mt-3 text-sm text-slate-500">{sub}</p>}
+  </Card>
+);
+
 const Dashboard = () => {
-  const { currentUnit, units, refreshUnits } = useUnit();
-  const [stats, setStats] = useState(null);
-  const [stockStatus, setStockStatus] = useState([]);
+  const { isAdmin } = useAuth();
+  const { money } = useStore();
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (currentUnit) {
-      fetchDashboardData();
-    }
-  }, [currentUnit]); // eslint-disable-line react-hooks/exhaustive-deps
+    fetchData();
+  }, []);
 
-  const fetchDashboardData = async () => {
-    setLoading(true);
+  const fetchData = async () => {
     try {
-      const [statsRes, stockRes] = await Promise.all([
-        axios.get(`${API}/reports/dashboard/${currentUnit.id}`),
-        axios.get(`${API}/reports/stock-status/${currentUnit.id}`)
-      ]);
-      setStats(statsRes.data);
-      setStockStatus(stockRes.data);
+      const res = await axios.get(`${API}/dashboard`, { params: { tz_offset: tzOffset() } });
+      setData(res.data);
     } catch (err) {
-      console.error('Failed to fetch dashboard data:', err);
+      toast.error(apiError(err, 'Falha ao carregar o painel'));
     } finally {
       setLoading(false);
     }
   };
 
-  const seedData = async () => {
+  const seedVapers = async () => {
     try {
-      await axios.post(`${API}/seed`);
-      toast.success('Sample data created successfully!');
-      fetchDashboardData();
+      const res = await axios.post(`${API}/products/seed-vapers`);
+      toast.success(res.data.message);
+      fetchData();
     } catch (err) {
-      toast.error('Failed to create sample data');
+      toast.error(apiError(err));
     }
   };
 
-  if (!currentUnit) {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {[1, 2, 3, 4].map((i) => <div key={i} className="h-32 bg-slate-100 rounded-xl animate-pulse" />)}
+      </div>
+    );
+  }
+
+  if (data && data.products_count === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
         <div className="p-4 bg-slate-100 rounded-full mb-6">
           <Package className="h-12 w-12 text-slate-400" />
         </div>
-        <h2 className="font-heading text-2xl font-bold text-slate-900 mb-2">No Unit Selected</h2>
+        <h2 className="font-heading text-2xl font-bold text-slate-900 mb-2">Nenhum produto ainda</h2>
         <p className="text-slate-500 mb-6 max-w-md">
-          Please create a unit first to start managing your kitchen inventory.
+          Cadastre seus vapers ou carregue 10 produtos de exemplo para começar. Depois registre uma
+          compra para dar entrada no estoque.
         </p>
-        <Link to="/settings">
-          <Button data-testid="create-unit-btn">
-            Create Your First Unit
-          </Button>
-        </Link>
+        <div className="flex gap-2 flex-wrap justify-center">
+          {isAdmin && (
+            <Button onClick={seedVapers} data-testid="seed-vapers-btn">
+              <Sparkles className="h-4 w-4 mr-2" /> Carregar 10 vapers de exemplo
+            </Button>
+          )}
+          <Link to="/products"><Button variant="outline">Ir para Produtos</Button></Link>
+        </div>
       </div>
     );
   }
 
-  const statusData = stockStatus.reduce((acc, item) => {
-    acc[item.status] = (acc[item.status] || 0) + 1;
-    return acc;
-  }, {});
-
-  const pieData = [
-    { name: 'OK', value: statusData.ok || 0, color: '#059669' },
-    { name: 'Low', value: statusData.low || 0, color: '#d97706' },
-    { name: 'Critical', value: statusData.critical || 0, color: '#e11d48' },
-  ].filter(d => d.value > 0);
-
-  const criticalItems = stockStatus.filter(item => item.status === 'critical').slice(0, 5);
-  const lowItems = stockStatus.filter(item => item.status === 'low').slice(0, 5);
+  if (!data) return null;
 
   return (
     <div className="space-y-8" data-testid="dashboard">
-      {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="font-heading text-3xl font-bold tracking-tight text-slate-900">
-            Dashboard
-          </h1>
-          <p className="text-slate-500 mt-1">
-            Overview of {currentUnit.name} inventory status
-          </p>
+          <h1 className="font-heading text-3xl font-bold tracking-tight text-slate-900">Painel</h1>
+          <p className="text-slate-500 mt-1">Resumo de vendas, compras e estoque</p>
         </div>
-        <div className="flex gap-3">
-          {stats?.total_items === 0 && (
-            <Button onClick={seedData} variant="outline" data-testid="seed-data-btn">
-              Load Sample Data
-            </Button>
-          )}
-          <Link to="/orders">
-            <Button data-testid="new-order-btn">
-              <ShoppingCart className="h-4 w-4 mr-2" />
-              New Order
-            </Button>
+        <div className="flex gap-2">
+          <Link to="/purchases">
+            <Button variant="outline"><Truck className="h-4 w-4 mr-2" /> Nova compra</Button>
+          </Link>
+          <Link to="/sales">
+            <Button><Receipt className="h-4 w-4 mr-2" /> Nova venda</Button>
           </Link>
         </div>
       </div>
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="kpi-card animate-fade-in stagger-1" data-testid="kpi-total-items">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-500">Total Items</p>
-              <p className="font-heading text-3xl font-bold text-slate-900 mt-1">
-                {stats?.total_items || 0}
-              </p>
-            </div>
-            <div className="p-2 bg-blue-50 rounded-lg">
-              <Package className="h-5 w-5 text-blue-600" />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center text-sm text-slate-500">
-            <Package className="h-5 w-5" />
-            {stats?.sections_count || 0} sections
-          </div>
-        </Card>
-
-        <Card className="kpi-card animate-fade-in stagger-2" data-testid="kpi-critical-stock">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-500">Critical Stock</p>
-              <p className="font-heading text-3xl font-bold text-rose-600 mt-1">
-                {stats?.critical_stock_count || 0}
-              </p>
-            </div>
-            <div className="p-2 bg-rose-50 rounded-lg">
-              <Package className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center text-sm text-amber-600">
-            <Package className="h-5 w-5" />
-            {stats?.low_stock_count || 0} items low
-          </div>
-        </Card>
-
-        <Card className="kpi-card animate-fade-in stagger-3" data-testid="kpi-pending-orders">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-500">Pending Orders</p>
-              <p className="font-heading text-3xl font-bold text-amber-600 mt-1">
-                {stats?.pending_orders || 0}
-              </p>
-            </div>
-            <div className="p-2 bg-amber-50 rounded-lg">
-              <ShoppingCart className="h-5 w-5 text-amber-600" />
-            </div>
-          </div>
-          <Link to="/orders" className="mt-4 flex items-center text-sm text-blue-600 hover:underline">
-            View orders
-            <Package className="h-5 w-5" />
-          </Link>
-        </Card>
-
-        <Card className="kpi-card animate-fade-in stagger-4" data-testid="kpi-completed-orders">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-500">Completed</p>
-              <p className="font-heading text-3xl font-bold text-emerald-600 mt-1">
-                {stats?.completed_orders || 0}
-              </p>
-            </div>
-            <div className="p-2 bg-emerald-50 rounded-lg">
-              <Package className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center text-sm text-slate-500">
-            <TrendingUp className="h-4 w-4 mr-1" />
-            Orders this month
-          </div>
-        </Card>
+        <Kpi label="Vendas hoje" value={money(data.today_revenue)} icon={Receipt}
+          tone="text-slate-900" sub={`${data.today_count} venda(s)`} />
+        <Kpi label="Vendas no mês" value={money(data.month_revenue)} icon={TrendingUp}
+          tone="text-emerald-600" sub={isAdmin ? `Lucro estimado: ${money(data.month_profit)}` : `${data.month_count} venda(s)`} />
+        <Kpi label="Compras no mês" value={money(data.month_purchases)} icon={Truck} tone="text-slate-900" />
+        <Kpi label="Estoque" value={`${data.units_in_stock} un.`} icon={Wallet} tone="text-slate-900"
+          sub={`Custo ${money(data.stock_value_cost)} · Venda ${money(data.stock_value_sale)}`} />
       </div>
 
-      {/* Charts and Tables */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Stock Status Chart */}
-        <Card className="lg:col-span-1" data-testid="stock-status-chart">
-          <CardHeader>
-            <CardTitle className="font-heading text-lg">Stock Status</CardTitle>
-          </CardHeader>
+        <Card className="lg:col-span-2">
+          <CardHeader><CardTitle className="font-heading text-lg">Vendas dos últimos 7 dias</CardTitle></CardHeader>
           <CardContent>
-            {pieData.length > 0 ? (
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="h-64 flex items-center justify-center text-slate-400">
-                No stock data available
-              </div>
-            )}
-            <div className="flex justify-center gap-6 mt-4">
-              {pieData.map((item) => (
-                <div key={item.name} className="flex items-center gap-2">
-                  <div
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="text-sm text-slate-600">
-                    {item.name} ({item.value})
-                  </span>
-                </div>
-              ))}
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data.last7}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} width={70} tickFormatter={(v) => money(v).replace(/,\d{2}$|\.\d{2}$/, '')} />
+                  <Tooltip formatter={(v) => [money(v), 'Vendas']} />
+                  <Bar dataKey="total" fill="#1d4ed8" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
 
-        {/* Critical Items */}
-        <Card className="lg:col-span-2" data-testid="critical-items-table">
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="font-heading text-lg">Items Requiring Attention</CardTitle>
-            <Link to="/daily-entry">
-              <Button variant="outline" size="sm" data-testid="update-stock-btn">
-                Update Stock
-              </Button>
-            </Link>
+            <CardTitle className="font-heading text-lg flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500" /> Repor estoque
+            </CardTitle>
+            <Link to="/purchases"><Button variant="outline" size="sm">Comprar</Button></Link>
           </CardHeader>
           <CardContent>
-            {criticalItems.length === 0 && lowItems.length === 0 ? (
-              <div className="text-center py-12 text-slate-400">
-                <Package className="h-5 w-5" />
-                <p className="font-medium">All items have adequate stock levels</p>
-              </div>
+            {data.low_stock.length === 0 ? (
+              <p className="text-center text-slate-400 py-8">Todos os produtos acima do mínimo</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Item</th>
-                      <th>Section</th>
-                      <th>Current</th>
-                      <th>Minimum</th>
-                      <th>Status</th>
+              <ul className="space-y-2 max-h-64 overflow-y-auto">
+                {data.low_stock.map((p) => (
+                  <li key={p.id} className="flex justify-between items-center text-sm gap-2">
+                    <span className="truncate">{p.name}</span>
+                    <span className={`whitespace-nowrap ${p.stock <= 0 ? 'status-critical' : 'status-low'}`}>
+                      {p.stock} / mín {p.min_stock}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader><CardTitle className="font-heading text-lg">Mais vendidos no mês</CardTitle></CardHeader>
+          <CardContent>
+            {data.top_products.length === 0 ? (
+              <p className="text-center text-slate-400 py-8">Sem vendas neste mês</p>
+            ) : (
+              <table className="data-table">
+                <thead><tr><th>Produto</th><th className="text-right">Qtd</th><th className="text-right">Total</th></tr></thead>
+                <tbody>
+                  {data.top_products.map((t) => (
+                    <tr key={t.product_name}>
+                      <td>{t.product_name}</td>
+                      <td className="text-right font-mono">{t.quantity}</td>
+                      <td className="text-right font-mono">{money(t.total)}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {[...criticalItems, ...lowItems].map((item) => (
-                      <tr key={item.item_id}>
-                        <td className="font-medium">{item.item_name}</td>
-                        <td className="text-slate-500">{item.section_name}</td>
-                        <td className="font-mono">
-                          {item.current_stock} {item.unit_of_measure}
-                        </td>
-                        <td className="font-mono text-slate-500">
-                          {item.minimum_stock} {item.unit_of_measure}
-                        </td>
-                        <td>
-                          <span className={`status-${item.status}`}>
-                            {item.status === 'critical' ? 'Critical' : 'Low'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="font-heading text-lg">Últimas vendas</CardTitle>
+            <Link to="/sales"><Button variant="outline" size="sm">Ver todas</Button></Link>
+          </CardHeader>
+          <CardContent>
+            {data.recent_sales.length === 0 ? (
+              <p className="text-center text-slate-400 py-8">Nenhuma venda ainda</p>
+            ) : (
+              <table className="data-table">
+                <tbody>
+                  {data.recent_sales.map((s) => (
+                    <tr key={s.id} className={s.status === 'cancelada' ? 'opacity-50' : ''}>
+                      <td>
+                        <p className="font-mono text-sm font-medium">{s.number}</p>
+                        <p className="text-xs text-slate-500">{formatDateTime(s.created_at)}</p>
+                      </td>
+                      <td className="text-sm">{s.customer_name || 'Consumidor final'}</td>
+                      <td className="text-right font-mono">{money(s.total)}</td>
+                      <td className="text-right">
+                        <Button variant="ghost" size="icon" title="Fatura PDF"
+                          onClick={() => openInvoice(s).catch(() => toast.error('Falha ao gerar a fatura'))}>
+                          <FileText className="h-4 w-4 text-slate-500" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </CardContent>
         </Card>
