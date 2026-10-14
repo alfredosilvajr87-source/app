@@ -11,6 +11,7 @@ import PurchasesPage from "./pages/PurchasesPage";
 import SalesPage from "./pages/SalesPage";
 import SettingsPage from "./pages/SettingsPage";
 import ReportsPage from "./pages/ReportsPage";
+import FinancePage from "./pages/FinancePage";
 import UsersPage from "./pages/UsersPage";
 import MasterPage from "./pages/MasterPage";
 
@@ -103,6 +104,14 @@ const AppRoutes = () => {
         <Route path="purchases" element={<PurchasesPage />} />
         <Route path="sales" element={<SalesPage />} />
         <Route path="reports" element={<ReportsPage />} />
+        <Route
+          path="finance"
+          element={
+            <AdminRoute>
+              <FinancePage />
+            </AdminRoute>
+          }
+        />
         {/* Users: somente Admin */}
         <Route
           path="users"

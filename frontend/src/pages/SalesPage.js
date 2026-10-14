@@ -56,7 +56,7 @@ const SalesPage = () => {
       ]);
       setSales(sRes.data);
       setProducts(prodRes.data);
-      if (isAdmin) setSellers((await axios.get(`${API}/users`)).data);
+      if (isAdmin) setSellers((await axios.get(`${API}/users`)).data.filter((u) => u.active !== false));
     } catch (err) {
       toast.error(apiError(err, 'Falha ao carregar vendas'));
     } finally {

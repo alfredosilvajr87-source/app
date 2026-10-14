@@ -77,14 +77,21 @@ class UserCreate(BaseModel):
     role: str = "user"  # admin, user
 
 class AdminUserCreate(BaseModel):
-    """Model for admin creating users - company_id is inherited from the admin"""
-    email: EmailStr
-    password: str
+    """Funcionário criado pelo admin (company_id herdado do admin).
+    Sem acesso ao sistema, e-mail e senha são opcionais."""
+    email: Optional[EmailStr] = None
+    password: Optional[str] = None
     name: str
     role: str = "user"  # admin, user
     unit_ids: List[str] = []
     commission_type: Literal["fixed", "percent"] = "fixed"   # fixed = valor por venda
     commission_value: float = Field(5.0, ge=0)
+    can_login: bool = True
+    active: bool = True
+    cpf: Optional[str] = ""
+    phone: Optional[str] = ""
+    job_title: Optional[str] = ""
+    salary: float = Field(0, ge=0)     # salário fixo mensal (entra no fechamento do mês)
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -92,7 +99,7 @@ class UserLogin(BaseModel):
 
 class UserResponse(BaseModel):
     id: str
-    email: str
+    email: Optional[str] = ""
     name: str
     company_id: str
     company_name: Optional[str] = ""
@@ -100,6 +107,12 @@ class UserResponse(BaseModel):
     unit_ids: List[str] = []
     commission_type: str = "fixed"
     commission_value: float = 5.0
+    can_login: bool = True
+    active: bool = True
+    cpf: Optional[str] = ""
+    phone: Optional[str] = ""
+    job_title: Optional[str] = ""
+    salary: float = 0
     created_at: str
 
 class PasswordChange(BaseModel):
@@ -112,6 +125,14 @@ class UserUpdate(BaseModel):
     unit_ids: Optional[List[str]] = None
     commission_type: Optional[Literal["fixed", "percent"]] = None
     commission_value: Optional[float] = Field(None, ge=0)
+    can_login: Optional[bool] = None
+    active: Optional[bool] = None
+    email: Optional[EmailStr] = None
+    password: Optional[str] = None     # admin define/redefine a senha
+    cpf: Optional[str] = None
+    phone: Optional[str] = None
+    job_title: Optional[str] = None
+    salary: Optional[float] = Field(None, ge=0)
 
 # Unit
 class UnitCreate(BaseModel):
@@ -151,6 +172,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         user = await db.users.find_one({"id": payload["user_id"]}, {"_id": 0})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
+        if not user.get("can_login", True) or not user.get("active", True):
+            raise HTTPException(status_code=401, detail="Acesso desativado")
         # Block access if company is inactive
         company = await db.companies.find_one({"id": user.get("company_id")}, {"_id": 0})
         if company and not company.get("active", True):
@@ -268,7 +291,8 @@ async def superadmin_delete_company(company_id: str, master_key: str = ""):
     await db.users.delete_many({"company_id": company_id})
     await db.companies.delete_one({"id": company_id})
     # Delete other company data if collections exist
-    for collection_name in ["products", "purchases", "sales", "stock_movements", "counters", "units", "settings"]:
+    for collection_name in ["products", "purchases", "sales", "stock_movements", "counters", "units", "settings",
+                            "expenses", "recurring_expenses", "month_closings"]:
         try:
             collection = db[collection_name]
             await collection.delete_many({"company_id": company_id})
@@ -313,44 +337,8 @@ async def superadmin_create_company(
 
 # ==================== AUTH ROUTES ====================
 
-@api_router.post("/auth/register", response_model=dict)
-async def register(user: UserCreate):
-    existing = await db.users.find_one({"email": user.email}, {"_id": 0})
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Check if company exists
-    company = await db.companies.find_one({"id": user.company_id}, {"_id": 0})
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-    
-    # First user of a company becomes admin
-    existing_users = await db.users.count_documents({"company_id": user.company_id})
-    role = "admin" if existing_users == 0 else user.role
-    
-    user_doc = {
-        "id": str(uuid.uuid4()),
-        "email": user.email,
-        "password": hash_password(user.password),
-        "name": user.name,
-        "company_id": user.company_id,
-        "role": role,
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.users.insert_one(user_doc)
-    
-    token = create_token(user_doc["id"], user_doc["email"], user_doc["company_id"], user_doc["role"])
-    return {
-        "token": token,
-        "user": {
-            "id": user_doc["id"],
-            "email": user_doc["email"],
-            "name": user_doc["name"],
-            "company_id": user_doc["company_id"],
-            "company_name": company["name"],
-            "role": user_doc["role"]
-        }
-    }
+# /auth/register removido: era público e permitia criar um admin em qualquer empresa.
+# Funcionários são criados pelo admin em /users.
 
 @api_router.post("/auth/register-first", response_model=dict)
 async def register_first_user(email: EmailStr, password: str, name: str, company_name: str, master_key: str = ""):
@@ -408,8 +396,10 @@ async def register_first_user(email: EmailStr, password: str, name: str, company
 @api_router.post("/auth/login", response_model=dict)
 async def login(credentials: UserLogin):
     user = await db.users.find_one({"email": credentials.email}, {"_id": 0})
-    if not user or not verify_password(credentials.password, user["password"]):
+    if not user or not user.get("password") or not verify_password(credentials.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not user.get("can_login", True) or not user.get("active", True):
+        raise HTTPException(status_code=403, detail="Este funcionário não tem acesso ao sistema")
     
     company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
     
@@ -429,15 +419,7 @@ async def login(credentials: UserLogin):
 @api_router.get("/auth/me", response_model=UserResponse)
 async def get_me(user: dict = Depends(get_current_user)):
     company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
-    return UserResponse(
-        id=user["id"],
-        email=user["email"],
-        name=user["name"],
-        company_id=user["company_id"],
-        company_name=company["name"] if company else "",
-        role=user["role"],
-        created_at=user["created_at"]
-    )
+    return user_response(user, company)
 
 @api_router.put("/auth/password")
 async def change_password(data: PasswordChange, user: dict = Depends(get_current_user)):
@@ -455,71 +437,101 @@ async def change_password(data: PasswordChange, user: dict = Depends(get_current
 
 # ==================== USER MANAGEMENT (Admin) ====================
 
+def user_response(u: dict, company: Optional[dict]) -> UserResponse:
+    data = {k: v for k, v in u.items() if k != "password" and v is not None}
+    data.setdefault("unit_ids", [])
+    data["email"] = u.get("email") or ""
+    return UserResponse(**{**data, "company_name": company["name"] if company else ""})
+
+async def check_employee_access(company_id: str, email: Optional[str], password: Optional[str],
+                                can_login: bool, user_id: Optional[str] = None, has_password: bool = False,
+                                current_email: Optional[str] = None):
+    """Com acesso ao sistema: e-mail único e senha (mínimo 6) obrigatórios.
+    `email` é o e-mail novo (checa duplicidade); `current_email` o que já está salvo."""
+    if email:
+        query = {"email": email}
+        if user_id:
+            query["id"] = {"$ne": user_id}
+        if await db.users.find_one(query, {"_id": 0, "id": 1}):
+            raise HTTPException(status_code=400, detail="E-mail já cadastrado")
+    if can_login:
+        if not (email or current_email):
+            raise HTTPException(status_code=400, detail="Informe o e-mail para dar acesso ao sistema")
+        if not password and not has_password:
+            raise HTTPException(status_code=400, detail="Informe uma senha para dar acesso ao sistema")
+    if password and len(password) < 6:
+        raise HTTPException(status_code=400, detail="A senha precisa ter pelo menos 6 caracteres")
+
 @api_router.get("/users", response_model=List[UserResponse])
 async def get_users(user: dict = Depends(get_current_user)):
     require_admin(user)
-    users = await db.users.find({"company_id": user["company_id"]}, {"_id": 0, "password": 0}).to_list(100)
+    users = await db.users.find({"company_id": user["company_id"]}, {"_id": 0, "password": 0}).sort("name", 1).to_list(500)
     company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
-    result = []
-    for u in users:
-        u.setdefault("unit_ids", [])
-        result.append(UserResponse(**{**u, "company_name": company["name"] if company else ""}))
-    return result
+    return [user_response(u, company) for u in users]
 
 @api_router.post("/users", response_model=UserResponse)
 async def create_user(new_user: AdminUserCreate, user: dict = Depends(get_current_user)):
     require_admin(user)
-    
-    existing = await db.users.find_one({"email": new_user.email}, {"_id": 0})
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+    email = new_user.email or None
+    await check_employee_access(user["company_id"], email, new_user.password, new_user.can_login)
     check_commission(new_user.commission_type, new_user.commission_value)
 
     user_doc = {
         "id": str(uuid.uuid4()),
-        "email": new_user.email,
-        "password": hash_password(new_user.password),
+        "email": email or "",
+        "password": hash_password(new_user.password) if new_user.password else "",
         "name": new_user.name,
         "company_id": user["company_id"],  # Same company as admin
-        "role": new_user.role,
-        "unit_ids": new_user.unit_ids if hasattr(new_user, 'unit_ids') else [],
+        "role": new_user.role if new_user.can_login else "user",
+        "unit_ids": new_user.unit_ids,
         "commission_type": new_user.commission_type,
         "commission_value": new_user.commission_value,
+        "can_login": new_user.can_login,
+        "active": new_user.active,
+        "cpf": new_user.cpf or "",
+        "phone": new_user.phone or "",
+        "job_title": new_user.job_title or "",
+        "salary": round(new_user.salary, 2),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.users.insert_one(user_doc)
-    
+
     company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
-    return UserResponse(**{**user_doc, "company_name": company["name"] if company else ""})
+    return user_response(user_doc, company)
 
 @api_router.put("/users/{user_id}", response_model=UserResponse)
 async def update_user(user_id: str, update: UserUpdate, user: dict = Depends(get_current_user)):
     require_admin(user)
-    
-    # unit_ids can be empty list — include it even if empty
+    current = await db.users.find_one({"id": user_id, "company_id": user["company_id"]}, {"_id": 0})
+    if not current:
+        raise HTTPException(status_code=404, detail="User not found")
+
     raw = update.model_dump()
-    update_data = {}
-    for k, v in raw.items():
-        if k == 'unit_ids':
-            update_data[k] = v if v is not None else []
-        elif v is not None:
-            update_data[k] = v
+    update_data = {k: v for k, v in raw.items() if v is not None and k != "password"}
+    if "unit_ids" in update_data and update_data["unit_ids"] is None:
+        update_data["unit_ids"] = []
+    if user_id == user["id"] and (update_data.get("can_login") is False or update_data.get("active") is False
+                                  or update_data.get("role", "admin") != "admin"):
+        raise HTTPException(status_code=400, detail="Você não pode remover o próprio acesso de administrador")
+
+    can_login = update_data.get("can_login", current.get("can_login", True))
+    await check_employee_access(user["company_id"], update_data.get("email"), update.password, can_login,
+                                user_id=user_id, has_password=bool(current.get("password")),
+                                current_email=current.get("email") or None)
+    if update.password:
+        update_data["password"] = hash_password(update.password)
+    if "salary" in update_data:
+        update_data["salary"] = round(update_data["salary"], 2)
+    check_commission(update_data.get("commission_type", current.get("commission_type", "fixed")),
+                     update_data.get("commission_value", current.get("commission_value", 5.0)))
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
-    if "commission_type" in update_data or "commission_value" in update_data:
-        current = await db.users.find_one({"id": user_id, "company_id": user["company_id"]}, {"_id": 0}) or {}
-        check_commission(update_data.get("commission_type", current.get("commission_type", "fixed")),
-                         update_data.get("commission_value", current.get("commission_value", 5.0)))
 
     # Admin só altera usuários da própria empresa
-    result = await db.users.update_one({"id": user_id, "company_id": user["company_id"]}, {"$set": update_data})
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="User not found")
-    
+    await db.users.update_one({"id": user_id, "company_id": user["company_id"]}, {"$set": update_data})
     updated = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
-    updated.setdefault("unit_ids", [])
     company = await db.companies.find_one({"id": updated["company_id"]}, {"_id": 0})
-    return UserResponse(**{**updated, "company_name": company["name"] if company else ""})
+    return user_response(updated, company)
 
 @api_router.delete("/users/{user_id}")
 async def delete_user(user_id: str, user: dict = Depends(get_current_user)):
@@ -955,8 +967,8 @@ async def create_sale(data: SaleCreate, user: dict = Depends(get_current_user)):
     if data.seller_id and data.seller_id != user["id"]:
         require_admin(user)
         seller = await db.users.find_one({"id": data.seller_id, "company_id": user["company_id"]}, {"_id": 0})
-        if not seller:
-            raise HTTPException(status_code=404, detail="Vendedor não encontrado")
+        if not seller or not seller.get("active", True):
+            raise HTTPException(status_code=404, detail="Vendedor não encontrado ou inativo")
     products = await load_products(user["company_id"], [i.product_id for i in data.items])
 
     # Quantidade total por produto (o mesmo produto pode aparecer em mais de uma linha)
@@ -1382,6 +1394,292 @@ async def commissions_report(start: Optional[str] = None, end: Optional[str] = N
                    "seller_name": s.get("seller_name") or s.get("created_by_name", ""),
                    "total": s["total"], "commission": s.get("commission", 0)} for s in reversed(sales)],
     }
+
+# ==================== FINANCEIRO: DESPESAS E FECHAMENTO DO MÊS ====================
+
+EXPENSE_CATEGORIES = [
+    "Aluguel", "Energia", "Água", "Internet/Telefone", "Impostos", "Contador",
+    "Marketing", "Manutenção", "Embalagens/Material", "Taxas de cartão", "Transporte", "Outros",
+]
+
+class ExpenseCreate(BaseModel):
+    description: str
+    category: str = "Outros"
+    amount: float = Field(..., gt=0)
+    date: str                         # AAAA-MM-DD
+    notes: Optional[str] = ""
+
+class RecurringExpenseCreate(BaseModel):
+    description: str
+    category: str = "Outros"
+    amount: float = Field(..., gt=0)
+    day_of_month: int = Field(5, ge=1, le=31)
+    active: bool = True
+    start_month: Optional[str] = None  # AAAA-MM (vazio = desde sempre)
+    end_month: Optional[str] = None    # AAAA-MM (vazio = sem fim)
+
+def parse_month(month: Optional[str], tz_offset: int = 0) -> str:
+    if not month:
+        return (datetime.now(timezone.utc) - timedelta(minutes=tz_offset)).strftime("%Y-%m")
+    try:
+        return datetime.strptime(month, "%Y-%m").strftime("%Y-%m")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Mês inválido (use AAAA-MM)")
+
+def month_bounds(month: str):
+    start = datetime.strptime(month, "%Y-%m").date()
+    nxt = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
+    return start, nxt - timedelta(days=1)
+
+def shift_month(month: str, delta: int) -> str:
+    y, m = map(int, month.split("-"))
+    idx = y * 12 + (m - 1) + delta
+    return f"{idx // 12:04d}-{idx % 12 + 1:02d}"
+
+def validate_expense(category: str, date_str: Optional[str] = None):
+    if category not in EXPENSE_CATEGORIES:
+        raise HTTPException(status_code=400, detail="Categoria inválida")
+    if date_str is not None:
+        try:
+            datetime.strptime(date_str, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Data inválida (use AAAA-MM-DD)")
+
+async def ensure_month_open(company_id: str, month: str):
+    if await db.month_closings.find_one({"company_id": company_id, "month": month}, {"_id": 1}):
+        raise HTTPException(status_code=400, detail=f"O mês {month[5:]}/{month[:4]} está fechado. Reabra-o para alterar.")
+
+def recurring_applies(r: dict, month: str) -> bool:
+    if not r.get("active", True):
+        return False
+    if r.get("start_month") and month < r["start_month"]:
+        return False
+    if r.get("end_month") and month > r["end_month"]:
+        return False
+    return True
+
+async def compute_month(company_id: str, month: str, tz_offset: int) -> dict:
+    """Resultado do mês (DRE simplificada) + fluxo de caixa"""
+    d_start, d_end = month_bounds(month)
+    sales = await sales_in_period(company_id, d_start, d_end, tz_offset)
+
+    since = (datetime.combine(d_start, datetime.min.time(), tzinfo=timezone.utc) - timedelta(days=1)).isoformat()
+    purchases = await db.purchases.find(
+        {"company_id": company_id, "status": "concluida", "created_at": {"$gte": since}},
+        {"_id": 0, "total": 1, "created_at": 1, "tz_offset": 1}).to_list(50000)
+    purchases = [p for p in purchases if d_start <= to_local(p["created_at"], tz_offset).date() <= d_end]
+
+    revenue = round(sum(s["total"] for s in sales), 2)
+    discounts = round(sum(s.get("discount", 0) for s in sales), 2)
+    cmv = round(sum(s.get("cost", 0) for s in sales), 2)
+    gross = round(revenue - cmv, 2)
+
+    by_seller = {}
+    for s in sales:
+        name = s.get("seller_name") or s.get("created_by_name", "")
+        row = by_seller.setdefault(name, {"name": name, "sales": 0, "amount": 0.0})
+        row["sales"] += 1
+        row["amount"] = round(row["amount"] + s.get("commission", 0), 2)
+    commissions = round(sum(r["amount"] for r in by_seller.values()), 2)
+
+    employees = await db.users.find({"company_id": company_id, "active": {"$ne": False}, "salary": {"$gt": 0}},
+                                    {"_id": 0, "name": 1, "salary": 1, "job_title": 1, "created_at": 1}).to_list(1000)
+    # Salário conta a partir do mês em que o funcionário foi cadastrado
+    salaries = [{"name": e["name"], "job_title": e.get("job_title", ""), "amount": round(e["salary"], 2)}
+                for e in employees if e.get("created_at", "")[:7] <= month]
+    salaries_total = round(sum(e["amount"] for e in salaries), 2)
+
+    recurring_docs = await db.recurring_expenses.find({"company_id": company_id}, {"_id": 0}).to_list(1000)
+    recurring = [{"id": r["id"], "description": r["description"], "category": r["category"],
+                  "amount": r["amount"], "day_of_month": r.get("day_of_month", 1)}
+                 for r in recurring_docs if recurring_applies(r, month)]
+    recurring_total = round(sum(r["amount"] for r in recurring), 2)
+
+    expenses = await db.expenses.find({"company_id": company_id, "date": {"$gte": d_start.isoformat(),
+                                       "$lte": d_end.isoformat()}}, {"_id": 0}).sort("date", 1).to_list(5000)
+    expenses_total = round(sum(e["amount"] for e in expenses), 2)
+
+    by_category = {}
+    for item in recurring + expenses:
+        by_category[item["category"]] = round(by_category.get(item["category"], 0) + item["amount"], 2)
+    if salaries_total:
+        by_category["Salários"] = round(by_category.get("Salários", 0) + salaries_total, 2)
+    if commissions:
+        by_category["Comissões"] = commissions
+
+    operating = round(commissions + salaries_total + recurring_total + expenses_total, 2)
+    net = round(gross - operating, 2)
+    purchases_total = round(sum(p["total"] for p in purchases), 2)
+    cash_out = round(purchases_total + operating, 2)
+
+    return {
+        "month": month,
+        "closed": False,
+        "sales_count": len(sales),
+        "revenue": revenue,
+        "discounts": discounts,
+        "cmv": cmv,
+        "gross_profit": gross,
+        "gross_margin": round(gross / revenue * 100, 1) if revenue else 0,
+        "commissions": commissions,
+        "commissions_by_seller": sorted(by_seller.values(), key=lambda r: r["amount"], reverse=True),
+        "salaries": salaries,
+        "salaries_total": salaries_total,
+        "recurring": recurring,
+        "recurring_total": recurring_total,
+        "expenses": expenses,
+        "expenses_total": expenses_total,
+        "expenses_by_category": dict(sorted(by_category.items(), key=lambda kv: kv[1], reverse=True)),
+        "operating_expenses": operating,
+        "net_result": net,
+        "net_margin": round(net / revenue * 100, 1) if revenue else 0,
+        "result_status": "lucro" if net > 0 else "prejuizo" if net < 0 else "zero",
+        "purchases_total": purchases_total,
+        "purchases_count": len(purchases),
+        "cash_in": revenue,
+        "cash_out": cash_out,
+        "cash_balance": round(revenue - cash_out, 2),
+    }
+
+async def month_summary(company_id: str, month: str, tz_offset: int) -> dict:
+    closing = await db.month_closings.find_one({"company_id": company_id, "month": month}, {"_id": 0})
+    if closing:
+        return {**closing["snapshot"], "closed": True, "closed_at": closing["closed_at"],
+                "closed_by_name": closing.get("closed_by_name", "")}
+    return await compute_month(company_id, month, tz_offset)
+
+@api_router.get("/finance/categories")
+async def expense_categories(user: dict = Depends(get_current_user)):
+    return EXPENSE_CATEGORIES
+
+@api_router.get("/finance/summary")
+async def finance_summary(month: Optional[str] = None, tz_offset: int = 0, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    return await month_summary(user["company_id"], parse_month(month, tz_offset), tz_offset)
+
+@api_router.get("/finance/history")
+async def finance_history(months: int = 6, end: Optional[str] = None, tz_offset: int = 0,
+                          user: dict = Depends(get_current_user)):
+    require_admin(user)
+    last = parse_month(end, tz_offset)
+    out = []
+    for i in range(max(1, min(months, 24)) - 1, -1, -1):
+        m = shift_month(last, -i)
+        s = await month_summary(user["company_id"], m, tz_offset)
+        out.append({"month": m, "label": f"{m[5:]}/{m[2:4]}", "revenue": s["revenue"],
+                    "costs": round(s["cmv"] + s["operating_expenses"], 2),
+                    "net_result": s["net_result"], "closed": s["closed"]})
+    return out
+
+@api_router.post("/finance/close")
+async def close_month(month: str, tz_offset: int = 0, user: dict = Depends(get_current_user)):
+    """Fecha o mês: grava uma foto dos números; despesas do mês ficam bloqueadas"""
+    require_admin(user)
+    month = parse_month(month)
+    if month > parse_month(None, tz_offset):
+        raise HTTPException(status_code=400, detail="Não é possível fechar um mês futuro")
+    await ensure_month_open(user["company_id"], month)
+    snapshot = await compute_month(user["company_id"], month, tz_offset)
+    await db.month_closings.insert_one({
+        "id": str(uuid.uuid4()), "company_id": user["company_id"], "month": month,
+        "snapshot": snapshot, "closed_at": now_iso(),
+        "closed_by": user["id"], "closed_by_name": user.get("name", ""),
+    })
+    status_txt = "lucro" if snapshot["net_result"] >= 0 else "prejuízo"
+    return {"message": f"Mês fechado com {status_txt} de {money(abs(snapshot['net_result']), (await get_store_settings(user['company_id']))['currency'])}"}
+
+@api_router.delete("/finance/close")
+async def reopen_month(month: str, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    result = await db.month_closings.delete_one({"company_id": user["company_id"], "month": parse_month(month)})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Este mês não está fechado")
+    return {"message": "Mês reaberto"}
+
+@api_router.get("/expenses")
+async def list_expenses(month: Optional[str] = None, tz_offset: int = 0, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    d_start, d_end = month_bounds(parse_month(month, tz_offset))
+    return await db.expenses.find({"company_id": user["company_id"], "date": {"$gte": d_start.isoformat(),
+                                   "$lte": d_end.isoformat()}}, {"_id": 0}).sort("date", -1).to_list(5000)
+
+@api_router.post("/expenses")
+async def create_expense(data: ExpenseCreate, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    validate_expense(data.category, data.date)
+    await ensure_month_open(user["company_id"], data.date[:7])
+    doc = {"id": str(uuid.uuid4()), "company_id": user["company_id"], **data.model_dump(),
+           "amount": round(data.amount, 2), "created_by_name": user.get("name", ""), "created_at": now_iso()}
+    await db.expenses.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.put("/expenses/{expense_id}")
+async def update_expense(expense_id: str, data: ExpenseCreate, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    validate_expense(data.category, data.date)
+    current = await db.expenses.find_one({"id": expense_id, "company_id": user["company_id"]}, {"_id": 0})
+    if not current:
+        raise HTTPException(status_code=404, detail="Despesa não encontrada")
+    await ensure_month_open(user["company_id"], current["date"][:7])
+    await ensure_month_open(user["company_id"], data.date[:7])
+    await db.expenses.update_one({"id": expense_id}, {"$set": {**data.model_dump(), "amount": round(data.amount, 2)}})
+    return await db.expenses.find_one({"id": expense_id}, {"_id": 0})
+
+@api_router.delete("/expenses/{expense_id}")
+async def delete_expense(expense_id: str, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    current = await db.expenses.find_one({"id": expense_id, "company_id": user["company_id"]}, {"_id": 0})
+    if not current:
+        raise HTTPException(status_code=404, detail="Despesa não encontrada")
+    await ensure_month_open(user["company_id"], current["date"][:7])
+    await db.expenses.delete_one({"id": expense_id})
+    return {"message": "Despesa excluída"}
+
+@api_router.get("/recurring-expenses")
+async def list_recurring(user: dict = Depends(get_current_user)):
+    require_admin(user)
+    return await db.recurring_expenses.find({"company_id": user["company_id"]}, {"_id": 0}).sort("description", 1).to_list(1000)
+
+def check_recurring_months(data: RecurringExpenseCreate):
+    for m in (data.start_month, data.end_month):
+        if m:
+            parse_month(m)
+    if data.start_month and data.end_month and data.start_month > data.end_month:
+        raise HTTPException(status_code=400, detail="O mês inicial é maior que o final")
+
+@api_router.post("/recurring-expenses")
+async def create_recurring(data: RecurringExpenseCreate, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    validate_expense(data.category)
+    # Sem mês inicial: começa no mês atual (não cria prejuízo em meses passados)
+    if not data.start_month:
+        data.start_month = parse_month(None)
+    check_recurring_months(data)
+    doc = {"id": str(uuid.uuid4()), "company_id": user["company_id"], **data.model_dump(),
+           "amount": round(data.amount, 2), "created_at": now_iso()}
+    await db.recurring_expenses.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.put("/recurring-expenses/{rec_id}")
+async def update_recurring(rec_id: str, data: RecurringExpenseCreate, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    validate_expense(data.category)
+    check_recurring_months(data)
+    result = await db.recurring_expenses.update_one({"id": rec_id, "company_id": user["company_id"]},
+                                                    {"$set": {**data.model_dump(), "amount": round(data.amount, 2)}})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Despesa fixa não encontrada")
+    return await db.recurring_expenses.find_one({"id": rec_id}, {"_id": 0})
+
+@api_router.delete("/recurring-expenses/{rec_id}")
+async def delete_recurring(rec_id: str, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    result = await db.recurring_expenses.delete_one({"id": rec_id, "company_id": user["company_id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Despesa fixa não encontrada")
+    return {"message": "Despesa fixa excluída (meses já fechados não mudam)"}
 
 # ==================== CONFIGURAÇÕES DA LOJA ====================
 

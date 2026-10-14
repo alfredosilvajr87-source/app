@@ -8,6 +8,7 @@ import {
   Box,
   BarChart3,
   Users,
+  Wallet,
   Settings,
   Lock
 } from 'lucide-react';
@@ -34,7 +35,8 @@ const Sidebar = ({ collapsed, mobileOpen, setMobileOpen }) => {
     { path: '/purchases', label: 'Compras',       icon: Package },
     { path: '/products',  label: 'Produtos',      icon: Box },
     { path: '/reports',   label: 'Relatórios',    icon: BarChart3 },
-    { path: '/users',     label: 'Usuários',      icon: Users,     adminOnly: true },
+    { path: '/finance',   label: 'Financeiro',    icon: Wallet,    adminOnly: true },
+    { path: '/users',     label: 'Funcionários',  icon: Users,     adminOnly: true },
     { path: '/settings',  label: 'Configurações', icon: Settings },
   ];
 
