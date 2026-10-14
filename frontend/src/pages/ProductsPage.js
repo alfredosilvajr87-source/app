@@ -248,7 +248,7 @@ const ProductsPage = () => {
                     const st = stockStatus(p);
                     return (
                       <tr key={p.id} className={p.active ? '' : 'opacity-50'}>
-                        <td>
+                        <td className="min-w-[220px]">
                           <div className="flex items-center gap-3">
                           <VapeIcon seed={p.id} />
                           <div>
@@ -353,7 +353,7 @@ const ProductsPage = () => {
                 Ativo para venda
               </label>
               <div className="col-span-2 rounded-xl border border-slate-200 p-3 grid grid-cols-2 gap-3">
-                <p className="col-span-2 text-sm font-medium text-white">Comissão do vendedor por este item</p>
+                <p className="col-span-2 text-sm font-medium text-foreground">Comissão do vendedor por este item</p>
                 <div className="space-y-1">
                   <Label>Tipo</Label>
                   <select className={SELECT_CLASS} value={form.commission_type}

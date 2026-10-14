@@ -22,6 +22,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts';
 import PageHeader from '../components/layout/PageHeader';
 import { SELECT_CLASS } from '../components/store/ItemLines';
+import { useTheme, chartColors } from '../context/ThemeContext';
 import { apiError, formatDateTime, tzOffset } from '../lib/store';
 
 import { API_URL as API } from '../config';
@@ -56,10 +57,10 @@ const Line = ({ sign, label, value, money, strong, hint }) => (
   <div className={`flex items-center justify-between gap-3 py-2.5 ${strong ? 'border-t border-slate-200 font-semibold' : ''}`}>
     <span className="flex items-center gap-2 min-w-0">
       <span className={`w-5 text-center font-mono ${sign === '+' ? 'text-emerald-400' : sign === '−' ? 'text-rose-400' : 'text-violet-300'}`}>{sign}</span>
-      <span className={strong ? 'text-white' : 'text-slate-300'}>{label}</span>
+      <span className={strong ? 'text-foreground' : 'text-slate-300'}>{label}</span>
       {hint && <span className="text-xs text-slate-500 hidden sm:inline">{hint}</span>}
     </span>
-    <span className={`font-mono whitespace-nowrap ${strong ? 'text-white text-lg' : 'text-slate-200'}`}>{money(value)}</span>
+    <span className={`font-mono whitespace-nowrap ${strong ? 'text-foreground text-lg' : 'text-slate-200'}`}>{money(value)}</span>
   </div>
 );
 
@@ -80,6 +81,8 @@ const HistoryTooltip = ({ active, payload, money }) => {
 
 const FinancePage = () => {
   const { money } = useStore();
+  const { isDark } = useTheme();
+  const cc = chartColors(isDark);
   const [month, setMonth] = useState(thisMonth());
   const [summary, setSummary] = useState(null);
   const [history, setHistory] = useState([]);
@@ -196,7 +199,7 @@ const FinancePage = () => {
           <Button variant="ghost" size="icon" onClick={() => setMonth(shiftMonth(month, -1))} title="Mês anterior">
             <ChevronLeft className="h-5 w-5" />
           </Button>
-          <span className="px-2 min-w-[150px] text-center font-medium text-white">{monthName(month).replace(/^./, (c) => c.toUpperCase())}</span>
+          <span className="px-2 min-w-[150px] text-center font-medium text-foreground">{monthName(month).replace(/^./, (c) => c.toUpperCase())}</span>
           <Button variant="ghost" size="icon" onClick={() => setMonth(shiftMonth(month, 1))} title="Próximo mês">
             <ChevronRight className="h-5 w-5" />
           </Button>
@@ -260,7 +263,7 @@ const FinancePage = () => {
             {/* DRE */}
             <Card className="xl:col-span-3">
               <CardHeader>
-                <CardTitle className="font-heading text-lg text-white">Demonstrativo do resultado</CardTitle>
+                <CardTitle className="font-heading text-lg text-foreground">Demonstrativo do resultado</CardTitle>
               </CardHeader>
               <CardContent>
                 <Line sign="+" label="Faturamento (vendas)" value={s.revenue} money={money} />
@@ -285,7 +288,7 @@ const FinancePage = () => {
             {/* Fluxo de caixa + categorias */}
             <div className="xl:col-span-2 space-y-5">
               <Card>
-                <CardHeader><CardTitle className="font-heading text-lg text-white">Fluxo de caixa</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="font-heading text-lg text-foreground">Fluxo de caixa</CardTitle></CardHeader>
                 <CardContent className="space-y-3 text-sm">
                   <div className="flex justify-between items-center">
                     <span className="flex items-center gap-2 text-slate-300"><ArrowDownCircle className="h-4 w-4 text-emerald-400" /> Entradas (vendas)</span>
@@ -300,7 +303,7 @@ const FinancePage = () => {
                     <span className="font-mono text-rose-400">− {money(s.operating_expenses)}</span>
                   </div>
                   <div className="flex justify-between items-center border-t border-slate-200 pt-3 font-semibold">
-                    <span className="text-white">Saldo</span>
+                    <span className="text-foreground">Saldo</span>
                     <span className={`font-mono ${s.cash_balance >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{money(s.cash_balance)}</span>
                   </div>
                   <p className="text-xs text-slate-500">
@@ -311,7 +314,7 @@ const FinancePage = () => {
               </Card>
 
               <Card>
-                <CardHeader><CardTitle className="font-heading text-lg text-white">Para onde foi o dinheiro</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="font-heading text-lg text-foreground">Para onde foi o dinheiro</CardTitle></CardHeader>
                 <CardContent>
                   {Object.keys(s.expenses_by_category).length === 0 ? (
                     <p className="text-center text-slate-400 py-4">Nenhuma despesa no mês</p>
@@ -338,18 +341,18 @@ const FinancePage = () => {
           {/* Histórico 6 meses */}
           <Card>
             <CardHeader>
-              <CardTitle className="font-heading text-lg text-white">Resultado dos últimos 6 meses</CardTitle>
+              <CardTitle className="font-heading text-lg text-foreground">Resultado dos últimos 6 meses</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={history} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#22223a" />
-                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#9a9ab3' }} axisLine={{ stroke: '#2a2a42' }} tickLine={false} />
-                    <YAxis tick={{ fontSize: 12, fill: '#9a9ab3' }} axisLine={false} tickLine={false} width={84}
+                    <CartesianGrid strokeDasharray="4 4" vertical={false} stroke={cc.grid} />
+                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: cc.tick }} axisLine={{ stroke: cc.axis }} tickLine={false} />
+                    <YAxis tick={{ fontSize: 12, fill: cc.tick }} axisLine={false} tickLine={false} width={84}
                       domain={[(min) => Math.min(0, min), (max) => Math.max(0, max)]}
                       tickFormatter={(v) => money(v).replace(/,\d{2}$|\.\d{2}$/, '')} />
-                    <ReferenceLine y={0} stroke="#3a3a55" />
+                    <ReferenceLine y={0} stroke={cc.axis} />
                     <Tooltip content={<HistoryTooltip money={money} />} cursor={{ fill: 'rgba(139,92,246,0.08)' }} />
                     <Bar dataKey="net_result" radius={[4, 4, 4, 4]} maxBarSize={56}>
                       {history.map((h) => (
@@ -378,7 +381,7 @@ const FinancePage = () => {
             <TabsContent value="expenses" className="mt-4">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                  <CardTitle className="font-heading text-lg text-white">Despesas avulsas · {money(s.expenses_total)}</CardTitle>
+                  <CardTitle className="font-heading text-lg text-foreground">Despesas avulsas · {money(s.expenses_total)}</CardTitle>
                   <Button disabled={s.closed} onClick={() => setExpenseForm({ ...EMPTY_EXPENSE, date: todayInMonth(month) })}>
                     <Plus className="h-4 w-4 mr-2" /> Nova despesa
                   </Button>
@@ -423,7 +426,7 @@ const FinancePage = () => {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0">
                   <div>
-                    <CardTitle className="font-heading text-lg text-white">Despesas fixas mensais</CardTitle>
+                    <CardTitle className="font-heading text-lg text-foreground">Despesas fixas mensais</CardTitle>
                     <p className="text-sm text-slate-400 mt-1">Entram sozinhas todo mês (aluguel, energia, internet…)</p>
                   </div>
                   <Button onClick={() => setRecurringForm(EMPTY_RECURRING)}><Plus className="h-4 w-4 mr-2" /> Nova despesa fixa</Button>
@@ -468,7 +471,7 @@ const FinancePage = () => {
             <TabsContent value="people" className="mt-4">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <Card>
-                  <CardHeader><CardTitle className="font-heading text-lg text-white">Salários · {money(s.salaries_total)}</CardTitle></CardHeader>
+                  <CardHeader><CardTitle className="font-heading text-lg text-foreground">Salários · {money(s.salaries_total)}</CardTitle></CardHeader>
                   <CardContent className="p-0">
                     {s.salaries.length === 0 ? (
                       <p className="text-center text-slate-400 py-8">Nenhum salário cadastrado em Funcionários</p>
@@ -487,7 +490,7 @@ const FinancePage = () => {
                   </CardContent>
                 </Card>
                 <Card>
-                  <CardHeader><CardTitle className="font-heading text-lg text-white">Comissões · {money(s.commissions)}</CardTitle></CardHeader>
+                  <CardHeader><CardTitle className="font-heading text-lg text-foreground">Comissões · {money(s.commissions)}</CardTitle></CardHeader>
                   <CardContent className="p-0">
                     {s.commissions_by_seller.length === 0 ? (
                       <p className="text-center text-slate-400 py-8">Nenhuma venda no mês</p>

@@ -91,7 +91,7 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="login-container">
+    <div className="login-container dark">
       {/* Image Section */}
       <div className="login-image hidden lg:flex">
         <img src="/logo.png" alt="Vapor Serrano — vapes, líquidos e acessórios" />

@@ -39,7 +39,7 @@ const Sidebar = ({ collapsed, mobileOpen, setMobileOpen }) => {
     { path: '/reports',  label: 'Relatórios',    icon: BarChart3 },
     { path: '/finance',   label: 'Financeiro',    icon: Wallet,    adminOnly: true },
     { path: '/users',     label: 'Funcionários',  icon: Users,     adminOnly: true },
-    { path: '/settings',  label: 'Configurações', icon: Settings },
+    { path: '/settings',  label: 'Configurações', icon: Settings,  adminOnly: true },
   ];
 
   // Barra inferior (celular) — telas mais usadas no balcão

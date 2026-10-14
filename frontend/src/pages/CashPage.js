@@ -167,7 +167,7 @@ const CashPage = () => {
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
             <Card>
-              <CardHeader><CardTitle className="font-heading text-lg text-white">Por forma de pagamento</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground">Por forma de pagamento</CardTitle></CardHeader>
               <CardContent className="p-0">
                 {data.by_method.length === 0 ? (
                   <p className="text-center text-slate-400 py-8">Nenhuma venda no dia</p>
@@ -187,7 +187,7 @@ const CashPage = () => {
             </Card>
 
             <Card>
-              <CardHeader><CardTitle className="font-heading text-lg text-white">Por vendedor</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground">Por vendedor</CardTitle></CardHeader>
               <CardContent className="p-0">
                 {data.by_seller.length === 0 ? (
                   <p className="text-center text-slate-400 py-8">Nenhuma venda no dia</p>
@@ -207,7 +207,7 @@ const CashPage = () => {
             </Card>
 
             <Card>
-              <CardHeader><CardTitle className="font-heading text-lg text-white">{data.closed ? 'Conferência' : 'Fechar o caixa'}</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="font-heading text-lg text-foreground">{data.closed ? 'Conferência' : 'Fechar o caixa'}</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 {data.closed ? (
                   <div className="space-y-2 text-sm">
@@ -257,7 +257,7 @@ const CashPage = () => {
       )}
 
       <Card>
-        <CardHeader><CardTitle className="font-heading text-lg text-white">Últimos fechamentos</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="font-heading text-lg text-foreground">Últimos fechamentos</CardTitle></CardHeader>
         <CardContent className="p-0">
           {history.length === 0 ? (
             <p className="text-center text-slate-400 py-8">Nenhum caixa fechado ainda</p>

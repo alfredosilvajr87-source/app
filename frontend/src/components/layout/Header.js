@@ -1,4 +1,5 @@
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -6,15 +7,27 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
-import { Menu, MapPin, Bell, ChevronDown, LogOut, Settings } from 'lucide-react';
-import { productLabel } from '../../lib/store';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '../ui/dialog';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { toast } from 'sonner';
+import { Menu, MapPin, Bell, ChevronDown, LogOut, Settings, Sun, Moon, KeyRound } from 'lucide-react';
+import { apiError, productLabel } from '../../lib/store';
 import { API_URL as API } from '../../config';
 
+const EMPTY_PWD = { current: '', new: '', confirm: '' };
+
 const Header = ({ onMenuClick }) => {
-  const { user, company, logout, isAdmin } = useAuth();
+  const { user, company, logout, isAdmin, changePassword } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
   const [lowStock, setLowStock] = useState([]);
+  const [pwdOpen, setPwdOpen] = useState(false);
+  const [pwd, setPwd] = useState(EMPTY_PWD);
 
   useEffect(() => {
     fetchLowStock();
@@ -27,6 +40,22 @@ const Header = ({ onMenuClick }) => {
     } catch { /* silencioso */ }
   };
 
+  const submitPassword = async (e) => {
+    e.preventDefault();
+    if (pwd.new !== pwd.confirm) {
+      toast.error('As senhas novas não coincidem');
+      return;
+    }
+    try {
+      await changePassword(pwd.current, pwd.new);
+      toast.success('Senha alterada');
+      setPwdOpen(false);
+      setPwd(EMPTY_PWD);
+    } catch (err) {
+      toast.error(apiError(err, 'Falha ao alterar a senha'));
+    }
+  };
+
   const initials = user?.name
     ? user.name.split(' ').filter(Boolean).map((w) => w[0]).join('').toUpperCase().slice(0, 2)
     : 'VS';
@@ -35,11 +64,11 @@ const Header = ({ onMenuClick }) => {
     <header className="app-topbar">
       <div className="topbar-left">
         <button className="topbar-btn" onClick={onMenuClick} title="Menu">
-          <Menu className="h-6 w-6" />
+          <Menu className="h-5 w-5" />
         </button>
         <span className="topbar-divider hidden sm:block" />
         <div className="topbar-store">
-          <MapPin className="h-5 w-5 text-slate-300 flex-shrink-0" />
+          <MapPin className="h-4 w-4 flex-shrink-0" />
           <div className="min-w-0">
             <div className="topbar-store-name">{company?.name || 'Loja Principal'}</div>
             <span className="topbar-online">Online</span>
@@ -69,13 +98,17 @@ const Header = ({ onMenuClick }) => {
                   </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate('/purchases')} className="justify-center text-violet-300">
+                <DropdownMenuItem onClick={() => navigate('/purchases')} className="justify-center text-violet-400">
                   Registrar compra
                 </DropdownMenuItem>
               </>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <button className="topbar-btn" onClick={toggleTheme} title={isDark ? 'Usar tema claro' : 'Usar tema escuro'}>
+          {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+        </button>
 
         <span className="topbar-divider hidden sm:block" />
 
@@ -87,7 +120,7 @@ const Header = ({ onMenuClick }) => {
                 <div className="topbar-user-name">{user?.name}</div>
                 <div className="topbar-user-role">{isAdmin ? 'Administrador' : 'Vendedor'}</div>
               </div>
-              <ChevronDown className="h-4 w-4 text-slate-400" />
+              <ChevronDown className="h-4 w-4 opacity-60" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
@@ -98,15 +131,52 @@ const Header = ({ onMenuClick }) => {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate('/settings')}>
-              <Settings className="h-4 w-4 mr-2" /> Configurações
+            <DropdownMenuItem onClick={() => setPwdOpen(true)}>
+              <KeyRound className="h-4 w-4 mr-2" /> Alterar senha
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={logout} className="text-rose-400 focus:text-rose-400">
+            <DropdownMenuItem onClick={toggleTheme}>
+              {isDark ? <Sun className="h-4 w-4 mr-2" /> : <Moon className="h-4 w-4 mr-2" />}
+              {isDark ? 'Tema claro' : 'Tema escuro'}
+            </DropdownMenuItem>
+            {isAdmin && (
+              <DropdownMenuItem onClick={() => navigate('/settings')}>
+                <Settings className="h-4 w-4 mr-2" /> Configurações
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={logout} className="text-rose-500 focus:text-rose-500">
               <LogOut className="h-4 w-4 mr-2" /> Sair
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      <Dialog open={pwdOpen} onOpenChange={setPwdOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-heading">Alterar senha</DialogTitle>
+            <DialogDescription>Digite a senha atual e escolha uma nova</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={submitPassword} className="space-y-4">
+            <div className="space-y-1">
+              <Label>Senha atual</Label>
+              <Input type="password" required value={pwd.current} onChange={(e) => setPwd({ ...pwd, current: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Nova senha</Label>
+              <Input type="password" required minLength={6} value={pwd.new} onChange={(e) => setPwd({ ...pwd, new: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Confirmar nova senha</Label>
+              <Input type="password" required value={pwd.confirm} onChange={(e) => setPwd({ ...pwd, confirm: e.target.value })} />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setPwdOpen(false)}>Cancelar</Button>
+              <Button type="submit">Alterar senha</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 };

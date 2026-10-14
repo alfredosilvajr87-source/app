@@ -2,6 +2,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { StoreProvider } from "./context/StoreContext";
+import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import { Toaster } from "./components/ui/sonner";
 import Layout from "./components/layout/Layout";
 import LoginPage from "./pages/LoginPage";
@@ -123,20 +124,35 @@ const AppRoutes = () => {
             </AdminRoute>
           }
         />
-        <Route path="settings" element={<SettingsPage />} />
+        {/* Configurações: somente Admin */}
+        <Route
+          path="settings"
+          element={
+            <AdminRoute>
+              <SettingsPage />
+            </AdminRoute>
+          }
+        />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 };
 
+const ThemedToaster = () => {
+  const { theme } = useTheme();
+  return <Toaster position="top-right" richColors theme={theme} />;
+};
+
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-        <Toaster position="top-right" richColors />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppRoutes />
+          <ThemedToaster />
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

@@ -4,12 +4,12 @@ const PageHeader = ({ icon: Icon, title, subtitle, children }) => (
     <div className="flex items-center gap-4 min-w-0">
       {Icon && (
         <div className="page-title-icon">
-          <Icon className="h-6 w-6" />
+          <Icon className="h-5 w-5" />
         </div>
       )}
       <div className="min-w-0">
-        <h1 className="font-heading text-3xl sm:text-4xl font-bold tracking-tight text-white">{title}</h1>
-        {subtitle && <p className="text-slate-400 mt-1 text-base">{subtitle}</p>}
+        <h1 className="font-heading text-2xl sm:text-3xl font-bold tracking-tight text-foreground">{title}</h1>
+        {subtitle && <p className="text-slate-500 mt-0.5 text-sm">{subtitle}</p>}
       </div>
     </div>
     {children && <div className="flex flex-wrap sm:flex-nowrap gap-3 shrink-0">{children}</div>}

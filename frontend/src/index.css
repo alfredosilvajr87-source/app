@@ -6,7 +6,7 @@
 
 /* ===================================================================
    Vapor Serrano — identidade visual
-   Tema escuro único: preto azulado, roxo e azul neon (cores do logo)
+   Dois temas: escuro (padrão) e claro. A barra lateral fica escura nos dois.
    =================================================================== */
 
 body {
@@ -30,15 +30,57 @@ code {
 }
 
 @layer base {
-    :root,
+    /* ---------- Tema claro ---------- */
+    :root {
+        --background: 240 25% 97%;         /* #f5f5fa */
+        --foreground: 240 30% 10%;
+        --card: 0 0% 100%;
+        --card-foreground: 240 30% 10%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 240 30% 10%;
+        --primary: 262 83% 58%;            /* roxo */
+        --primary-foreground: 0 0% 100%;
+        --secondary: 240 20% 94%;
+        --secondary-foreground: 240 30% 12%;
+        --muted: 240 20% 95%;
+        --muted-foreground: 240 8% 42%;
+        --accent: 262 70% 95%;
+        --accent-foreground: 262 50% 30%;
+        --destructive: 350 89% 50%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 240 16% 88%;
+        --input: 240 16% 84%;
+        --ring: 262 83% 58%;
+        --radius: 0.75rem;
+
+        --surface: #ffffff;
+        --surface-2: #f3f2f9;
+        --line: #e3e1ee;
+        --line-soft: #efeef6;
+        --text-strong: #12121f;
+        --text-2: #3f3f55;
+        --text-3: #6b6b85;
+        --topbar-bg: rgba(255, 255, 255, 0.88);
+        --card-shadow: 0 1px 2px rgba(18, 18, 31, 0.06), 0 4px 16px rgba(18, 18, 31, 0.05);
+        --smoke-1: rgba(139, 92, 246, 0.12);
+        --smoke-2: rgba(59, 130, 246, 0.10);
+
+        --ok-fg: #047857;  --ok-bg: #d1fae5;  --ok-line: #a7f3d0;
+        --low-fg: #b45309; --low-bg: #fef3c7; --low-line: #fde68a;
+        --bad-fg: #be123c; --bad-bg: #ffe4e6; --bad-line: #fecdd3;
+
+        --brand-gradient: linear-gradient(90deg, #a855f7 0%, #6366f1 55%, #0ea5e9 100%);
+    }
+
+    /* ---------- Tema escuro ---------- */
     .dark {
         --background: 240 33% 4%;          /* #07070f */
         --foreground: 240 20% 96%;
-        --card: 240 30% 8%;                /* #0e0e1a */
+        --card: 240 30% 8%;
         --card-foreground: 240 20% 96%;
         --popover: 240 30% 9%;
         --popover-foreground: 240 20% 96%;
-        --primary: 262 83% 63%;            /* roxo #8b5cf6 */
+        --primary: 262 83% 63%;
         --primary-foreground: 0 0% 100%;
         --secondary: 240 22% 14%;
         --secondary-foreground: 240 20% 96%;
@@ -51,22 +93,22 @@ code {
         --border: 240 20% 18%;
         --input: 240 20% 20%;
         --ring: 262 83% 63%;
-        --chart-1: 262 83% 66%;
-        --chart-2: 217 91% 60%;
-        --chart-3: 173 80% 40%;
-        --chart-4: 38 92% 50%;
-        --chart-5: 350 89% 60%;
-        --radius: 0.75rem;
 
-        /* tokens da marca */
-        --brand-purple: #8b5cf6;
-        --brand-violet: #6d28d9;
-        --brand-blue: #3b82f6;
-        --brand-cyan: #22d3ee;
-        --brand-teal: #14b8a6;
-        --brand-amber: #f59e0b;
-        --brand-rose: #f43f5e;
-        --brand-gradient: linear-gradient(90deg, #a855f7 0%, #6366f1 55%, #0ea5e9 100%);
+        --surface: #0c0c17;
+        --surface-2: #12121f;
+        --line: #23233a;
+        --line-soft: #1c1c2e;
+        --text-strong: #ffffff;
+        --text-2: #e4e4f0;
+        --text-3: #9a9ab3;
+        --topbar-bg: rgba(8, 8, 15, 0.82);
+        --card-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset;
+        --smoke-1: rgba(139, 92, 246, 0.28);
+        --smoke-2: rgba(59, 130, 246, 0.22);
+
+        --ok-fg: #34d399;  --ok-bg: rgba(16, 185, 129, 0.12);  --ok-line: rgba(16, 185, 129, 0.4);
+        --low-fg: #fbbf24; --low-bg: rgba(245, 158, 11, 0.12); --low-line: rgba(245, 158, 11, 0.45);
+        --bad-fg: #fb7185; --bad-bg: rgba(244, 63, 94, 0.12);  --bad-line: rgba(244, 63, 94, 0.5);
     }
 }
 
@@ -89,9 +131,8 @@ code {
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: #0b0b16; border-radius: 4px; }
-::-webkit-scrollbar-thumb { background: #2a2a44; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #3b3b5c; }
+::-webkit-scrollbar-track { background: var(--surface-2); border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
 
 /* Animations */
 @keyframes fadeIn {
@@ -110,12 +151,9 @@ code {
 .stagger-4 { animation-delay: 0.2s; }
 .stagger-5 { animation-delay: 0.25s; }
 
-/* Card hover effects */
 .card-hover {
     @apply transition-all duration-200 hover:-translate-y-0.5;
 }
-
-/* Focus states */
 .focus-ring {
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2;
 }
@@ -126,7 +164,24 @@ code {
     }
 }
 
-/* ===== Mapeia as classes slate/white das páginas para a paleta escura ===== */
+/* ===== Cards (os dois temas) ===== */
+.rounded-xl.border.bg-card {
+    background: var(--surface);
+    border-color: var(--line);
+    box-shadow: var(--card-shadow);
+}
+.dark .rounded-xl.border.bg-card {
+    background: linear-gradient(180deg, #10101d 0%, #0c0c17 100%);
+}
+
+/* Botão primário com gradiente roxo */
+.bg-primary {
+    background-image: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%);
+    box-shadow: 0 3px 12px rgba(124, 58, 237, 0.3);
+}
+.bg-primary:hover { filter: brightness(1.08); }
+
+/* ===== Tema escuro: classes slate/white das páginas viram a paleta escura ===== */
 .dark .text-slate-900 { color: #f4f4fb !important; }
 .dark .text-slate-800 { color: #e4e4f0 !important; }
 .dark .text-slate-700 { color: #cfcfe0 !important; }
@@ -146,7 +201,6 @@ code {
 .dark .hover\:bg-slate-50:hover { background-color: #161626 !important; }
 .dark .hover\:bg-slate-100:hover { background-color: #1e1e31 !important; }
 
-/* Pílulas coloridas (classes ABC, avisos) ficam translúcidas no escuro */
 .dark .bg-emerald-100, .dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.14) !important; }
 .dark .text-emerald-700, .dark .text-emerald-600 { color: #34d399 !important; }
 .dark .bg-amber-100, .dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.14) !important; }
@@ -158,33 +212,35 @@ code {
 .dark .bg-blue-100, .dark .bg-blue-50 { background-color: rgba(139, 92, 246, 0.16) !important; }
 .dark .text-blue-700, .dark .text-blue-600 { color: #a78bfa !important; }
 
-/* Cards */
-.dark .rounded-xl.border.bg-card {
-    background: linear-gradient(180deg, #10101d 0%, #0c0c17 100%);
-    border-color: #23233a;
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset;
-}
-
-/* Inputs */
 .dark input, .dark textarea, .dark select {
     background-color: #12121f !important;
     border-color: #2a2a42 !important;
     color: #f4f4fb !important;
 }
-.dark input:focus, .dark textarea:focus, .dark select:focus {
-    border-color: #8b5cf6 !important;
-    box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.5);
-    outline: none;
-}
-.dark input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.8); }
+.dark input[type="date"]::-webkit-calendar-picker-indicator,
+.dark input[type="month"]::-webkit-calendar-picker-indicator { filter: invert(0.8); }
 .dark option { background-color: #12121f; }
 
-/* Botão primário com gradiente roxo */
-.dark .bg-primary {
-    background-image: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%);
-    box-shadow: 0 4px 18px rgba(124, 58, 237, 0.35);
+input:focus, textarea:focus, select:focus {
+    border-color: #8b5cf6 !important;
+    box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.45);
+    outline: none;
 }
-.dark .bg-primary:hover { filter: brightness(1.1); }
+
+/* ===== Tema claro: tons pensados para o fundo escuro ficam legíveis no claro ===== */
+:root:not(.dark) .text-slate-200 { color: #334155; }
+:root:not(.dark) .text-slate-300 { color: #475569; }
+:root:not(.dark) .text-emerald-400 { color: #059669; }
+:root:not(.dark) .text-rose-400 { color: #e11d48; }
+:root:not(.dark) .text-amber-400,
+:root:not(.dark) .text-amber-300 { color: #b45309; }
+:root:not(.dark) .text-sky-400,
+:root:not(.dark) .text-sky-300 { color: #0369a1; }
+:root:not(.dark) .text-violet-300,
+:root:not(.dark) .text-violet-400 { color: #6d28d9; }
+:root:not(.dark) input,
+:root:not(.dark) textarea,
+:root:not(.dark) select { background-color: #ffffff; }
 
 /* Hide Emergent badge on mobile to avoid navigation issues */
 [data-testid="emergent-badge"],
