@@ -26,6 +26,7 @@ import base64
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+DEFAULT_LOGO = ROOT_DIR / 'assets' / 'logo.png'   # logo usado na fatura quando a loja não enviou outro
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -1065,7 +1066,7 @@ def build_invoice_pdf(sale: dict, company: dict, settings: dict) -> bytes:
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.6*inch, bottomMargin=0.6*inch,
                             leftMargin=0.7*inch, rightMargin=0.7*inch)
     styles = getSampleStyleSheet()
-    dark = colors.HexColor('#0f172a')
+    dark = colors.HexColor('#2e1065')    # roxo escuro da marca
     muted = colors.HexColor('#64748b')
     small = ParagraphStyle('small', parent=styles['Normal'], fontSize=9, textColor=muted, leading=12)
     normal = ParagraphStyle('normal', parent=styles['Normal'], fontSize=10, leading=13)
@@ -1077,9 +1078,14 @@ def build_invoice_pdf(sale: dict, company: dict, settings: dict) -> bytes:
     # Cabeçalho: logo + dados da loja | número da fatura
     left = []
     logo_url = company.get("logo_url") or ""
+    logo_src = None
     if logo_url.startswith("data:image") and "base64," in logo_url:
+        logo_src = BytesIO(base64.b64decode(logo_url.split("base64,", 1)[1]))
+    elif DEFAULT_LOGO.exists():
+        logo_src = str(DEFAULT_LOGO)
+    if logo_src:
         try:
-            img = Image(BytesIO(base64.b64decode(logo_url.split("base64,", 1)[1])))
+            img = Image(logo_src)
             ratio = img.imageWidth / float(img.imageHeight)
             img.drawHeight = 0.7*inch
             img.drawWidth = min(0.7*inch * ratio, 2*inch)

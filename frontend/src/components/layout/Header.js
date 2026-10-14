@@ -1,111 +1,93 @@
 import { useAuth } from '../../context/AuthContext';
 import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import BACKEND_URL from '../../config';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
-import {
-  ChevronDown, LogOut, Store, Shield,
-  Sun, Moon, AlertTriangle, Package,
-} from 'lucide-react';
+import { Menu, MapPin, Bell, ChevronDown, LogOut, Settings } from 'lucide-react';
+import { productLabel } from '../../lib/store';
 import { API_URL as API } from '../../config';
 
 const Header = ({ onMenuClick }) => {
   const { user, company, logout, isAdmin } = useAuth();
   const location = useLocation();
-  const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') === 'dark');
-  const [kpis, setKpis] = useState({ units: 0, low: 0 });
+  const navigate = useNavigate();
+  const [lowStock, setLowStock] = useState([]);
 
   useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-    }
-  }, [isDark]);
-
-  useEffect(() => {
-    fetchKpis();
+    fetchLowStock();
   }, [location.pathname]); // eslint-disable-line
 
-  const fetchKpis = async () => {
+  const fetchLowStock = async () => {
     try {
       const res = await axios.get(`${API}/products`, { params: { include_inactive: false } });
-      setKpis({
-        units: res.data.reduce((sum, p) => sum + p.stock, 0),
-        low: res.data.filter((p) => p.stock <= p.min_stock).length,
-      });
-    } catch { /* silent */ }
+      setLowStock(res.data.filter((p) => p.stock <= p.min_stock).sort((a, b) => a.stock - b.stock));
+    } catch { /* silencioso */ }
   };
 
   const initials = user?.name
-    ? user.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    ? user.name.split(' ').filter(Boolean).map((w) => w[0]).join('').toUpperCase().slice(0, 2)
     : 'VS';
 
   return (
-    <header className="dark-header">
-      {/* Left: logo + company */}
-      <div className="dark-header-left">
-        <button className="mobile-menu-btn lg:hidden" onClick={onMenuClick}>
-          <span style={{ fontSize: 20 }}>☰</span>
+    <header className="app-topbar">
+      <div className="topbar-left">
+        <button className="topbar-btn" onClick={onMenuClick} title="Menu">
+          <Menu className="h-6 w-6" />
         </button>
-        <div className="dark-header-logo-wrap">
-          {company?.logo_url ? (
-            <img src={company.logo_url.startsWith('/api')
-              ? `${BACKEND_URL}${company.logo_url}`
-              : company.logo_url}
-              alt={company?.name}
-              className="dark-header-logo-img"
-            />
-          ) : (
-            <div className="dark-header-logo-icon">
-              <Store className="h-4 w-4 text-white" />
-            </div>
-          )}
-          <div className="dark-header-company-info">
-            <span className="dark-header-company-name">{company?.name || 'Vape Store'}</span>
-            {isAdmin && (
-              <span className="dark-header-admin-badge">
-                <Shield className="h-2.5 w-2.5" /> Admin
-              </span>
+        <span className="topbar-divider hidden sm:block" />
+        <div className="topbar-store">
+          <MapPin className="h-5 w-5 text-slate-300 flex-shrink-0" />
+          <div className="min-w-0">
+            <div className="topbar-store-name">{company?.name || 'Loja Principal'}</div>
+            <span className="topbar-online">Online</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="topbar-right">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="topbar-btn" title="Avisos de estoque">
+              <Bell className="h-5 w-5" />
+              {lowStock.length > 0 && <span className="topbar-badge">{lowStock.length}</span>}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-72">
+            <DropdownMenuLabel>Repor estoque</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {lowStock.length === 0 ? (
+              <p className="px-2 py-3 text-sm text-slate-400">Nenhum produto abaixo do mínimo</p>
+            ) : (
+              <>
+                {lowStock.slice(0, 8).map((p) => (
+                  <DropdownMenuItem key={p.id} onClick={() => navigate('/products')} className="justify-between gap-3">
+                    <span className="truncate">{productLabel(p)}</span>
+                    <span className={p.stock <= 0 ? 'status-critical' : 'status-low'}>{p.stock} / mín {p.min_stock}</span>
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate('/purchases')} className="justify-center text-violet-300">
+                  Registrar compra
+                </DropdownMenuItem>
+              </>
             )}
-          </div>
-        </div>
-      </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-      {/* Center: KPI chips */}
-      <div className="dark-header-kpis">
-        <div className="dark-kpi-chip">
-          <Package className="h-3 w-3 text-slate-400" />
-          <span className="dark-kpi-val">{kpis.units}</span>
-          <span className="dark-kpi-lbl">em estoque</span>
-        </div>
-        {kpis.low > 0 && (
-          <div className="dark-kpi-chip dark-kpi-chip--danger">
-            <AlertTriangle className="h-3 w-3" />
-            <span className="dark-kpi-val">{kpis.low}</span>
-            <span className="dark-kpi-lbl">repor</span>
-          </div>
-        )}
-      </div>
-
-      {/* Right: theme + user */}
-      <div className="dark-header-right">
-        <button className="dark-icon-btn" onClick={() => setIsDark(v => !v)} title="Alternar tema">
-          {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </button>
+        <span className="topbar-divider hidden sm:block" />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="dark-user-btn">
-              <div className="dark-avatar">{initials}</div>
-              <span className="dark-user-name hidden sm:block">{user?.name}</span>
-              <ChevronDown className="h-3 w-3 opacity-60" />
+            <button className="topbar-user">
+              <div className="topbar-avatar">{initials}</div>
+              <div className="hidden sm:block">
+                <div className="topbar-user-name">{user?.name}</div>
+                <div className="topbar-user-role">{isAdmin ? 'Administrador' : 'Vendedor'}</div>
+              </div>
+              <ChevronDown className="h-4 w-4 text-slate-400" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
@@ -116,9 +98,11 @@ const Header = ({ onMenuClick }) => {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout} className="text-red-600 focus:text-red-600">
-              <LogOut className="h-4 w-4 mr-2" />
-              Sair
+            <DropdownMenuItem onClick={() => navigate('/settings')}>
+              <Settings className="h-4 w-4 mr-2" /> Configurações
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={logout} className="text-rose-400 focus:text-rose-400">
+              <LogOut className="h-4 w-4 mr-2" /> Sair
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -1,11 +1,11 @@
 {
-  "name": "Vape Store",
-  "short_name": "VapeStore",
-  "description": "Estoque e vendas de vapers",
+  "name": "Vapor Serrano",
+  "short_name": "Vapor Serrano",
+  "description": "Vapes, líquidos e acessórios",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
+  "background_color": "#08080f",
+  "theme_color": "#08080f",
   "orientation": "portrait-primary",
   "icons": [
     {

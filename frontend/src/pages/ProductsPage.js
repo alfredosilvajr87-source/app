@@ -15,8 +15,10 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../components/ui/alert-dialog';
-import { Package, Plus, Pencil, Trash2, Search, SlidersHorizontal, History, Sparkles, Tags } from 'lucide-react';
+import { Package, Plus, Pencil, Trash2, Search, SlidersHorizontal, History, Sparkles, Tags, Box } from 'lucide-react';
 import { apiError, formatDateTime, productLabel, stockStatus } from '../lib/store';
+import PageHeader from '../components/layout/PageHeader';
+import VapeIcon from '../components/store/VapeIcon';
 
 import { API_URL as API } from '../config';
 
@@ -172,11 +174,7 @@ const ProductsPage = () => {
 
   return (
     <div className="space-y-6" data-testid="products-page">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-3xl font-bold tracking-tight text-slate-900">Produtos</h1>
-          <p className="text-slate-500 mt-1">Cadastro de vapers, preços e estoque atual</p>
-        </div>
+      <PageHeader icon={Box} title="Produtos" subtitle="Cadastro de vapers, preços e estoque atual">
         {isAdmin && (
           <div className="flex gap-2">
             {products.length > 0 && (
@@ -189,7 +187,7 @@ const ProductsPage = () => {
             </Button>
           </div>
         )}
-      </div>
+      </PageHeader>
 
       <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
         <div className="relative flex-1">
@@ -246,11 +244,16 @@ const ProductsPage = () => {
                     return (
                       <tr key={p.id} className={p.active ? '' : 'opacity-50'}>
                         <td>
+                          <div className="flex items-center gap-3">
+                          <VapeIcon seed={p.id} />
+                          <div>
                           <p className="font-medium">{productLabel(p)}</p>
                           <p className="text-xs text-slate-500">
                             {[p.brand, p.puffs ? `${p.puffs.toLocaleString('pt-BR')} puffs` : null, !p.active && 'Inativo']
                               .filter(Boolean).join(' · ')}
                           </p>
+                          </div>
+                          </div>
                         </td>
                         <td className="font-mono text-slate-500 whitespace-nowrap">{p.sku}</td>
                         <td className="text-right font-mono">{money(p.cost_price)}</td>

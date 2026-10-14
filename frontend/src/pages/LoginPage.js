@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from '../components/ui/dialog';
 import { toast } from 'sonner';
-import { Store, Mail, Lock, User, Building2, KeyRound } from 'lucide-react';
+import { Mail, Lock, User, Building2, KeyRound } from 'lucide-react';
 
 import { API_URL as API } from '../config';
 
@@ -48,9 +48,9 @@ const LoginPage = () => {
     setLoading(true);
     try {
       await login(loginForm.email, loginForm.password);
-      toast.success('Welcome back!');
+      toast.success('Bem-vindo de volta!');
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Login failed');
+      toast.error((err.response?.status === 401 ? 'E-mail ou senha incorretos' : err.response?.data?.detail || 'Falha ao entrar'));
     } finally {
       setLoading(false);
     }
@@ -61,9 +61,9 @@ const LoginPage = () => {
     setLoading(true);
     try {
       await registerFirst(registerForm.email, registerForm.password, registerForm.name, registerForm.companyName, registerForm.masterKey);
-      toast.success('Account created successfully!');
+      toast.success('Conta criada!');
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Registration failed');
+      toast.error(err.response?.data?.detail || 'Falha ao criar a conta');
     } finally {
       setLoading(false);
     }
@@ -93,44 +93,26 @@ const LoginPage = () => {
   return (
     <div className="login-container">
       {/* Image Section */}
-      <div
-        className="login-image hidden lg:block"
-        style={{
-          backgroundImage: 'linear-gradient(135deg, #0f172a 0%, #1d4ed8 60%, #7c3aed 100%)'
-        }}
-      >
-        <div className="absolute inset-0 flex items-end p-12 z-10">
-          <div className="text-white">
-            <h1 className="font-heading text-5xl font-black tracking-tight mb-4">Vape Store</h1>
-            <p className="text-xl text-white/80 max-w-md">
-              Compras, vendas, estoque e faturas em um só lugar.
-            </p>
-          </div>
-        </div>
+      <div className="login-image hidden lg:flex">
+        <img src="/logo.png" alt="Vapor Serrano — vapes, líquidos e acessórios" />
       </div>
 
       {/* Form Section */}
       <div className="login-form">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center lg:hidden">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <div className="p-3 bg-slate-900 rounded-xl">
-                <Store className="h-8 w-8 text-white" />
-              </div>
-            </div>
-            <h1 className="font-heading text-3xl font-black tracking-tight text-slate-900">Vape Store</h1>
-            <p className="text-slate-500 mt-2">Estoque e vendas</p>
+            <img src="/logo.png" alt="Vapor Serrano" className="w-56 mx-auto logo-blend" />
           </div>
 
-          <div className="hidden lg:block">
-            <h2 className="font-heading text-2xl font-bold text-slate-900">Bem-vindo</h2>
-            <p className="text-slate-500 mt-1">Entre para gerenciar sua loja</p>
+          <div>
+            <h2 className="font-heading text-3xl font-bold text-white">Bem-vindo</h2>
+            <p className="text-slate-400 mt-1">Entre para gerenciar a loja</p>
           </div>
 
           <Tabs defaultValue="login" className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-8">
-              <TabsTrigger value="login" data-testid="login-tab">Sign In</TabsTrigger>
-              <TabsTrigger value="register" data-testid="register-tab">Create Company</TabsTrigger>
+              <TabsTrigger value="login" data-testid="login-tab">Entrar</TabsTrigger>
+              <TabsTrigger value="register" data-testid="register-tab">Nova loja</TabsTrigger>
             </TabsList>
 
             <TabsContent value="login">
@@ -138,14 +120,14 @@ const LoginPage = () => {
                 <CardContent className="p-0 space-y-6">
                   <form onSubmit={handleLogin} className="space-y-5">
                     <div className="space-y-2">
-                      <Label htmlFor="login-email">Email</Label>
+                      <Label htmlFor="login-email">E-mail</Label>
                       <div className="relative">
                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                         <Input
                           id="login-email"
                           data-testid="login-email-input"
                           type="email"
-                          placeholder="user@company.com"
+                          placeholder="voce@email.com"
                           className="pl-10 h-12"
                           value={loginForm.email}
                           onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
@@ -155,14 +137,14 @@ const LoginPage = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="login-password">Password</Label>
+                      <Label htmlFor="login-password">Senha</Label>
                       <div className="relative">
                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                         <Input
                           id="login-password"
                           data-testid="login-password-input"
                           type="password"
-                          placeholder="Enter your password"
+                          placeholder="Sua senha"
                           className="pl-10 h-12"
                           value={loginForm.password}
                           onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
@@ -174,10 +156,10 @@ const LoginPage = () => {
                     <Button
                       type="submit"
                       data-testid="login-submit-btn"
-                      className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white font-semibold"
+                      className="w-full h-12 font-semibold"
                       disabled={loading}
                     >
-                      {loading ? 'Signing in...' : 'Sign In'}
+                      {loading ? 'Entrando...' : 'Entrar'}
                     </Button>
 
                     <Button
@@ -188,7 +170,7 @@ const LoginPage = () => {
                       data-testid="forgot-password-btn"
                     >
                       <KeyRound className="h-4 w-4 mr-2" />
-                      Forgot password?
+                      Esqueci a senha
                     </Button>
                   </form>
                 </CardContent>
@@ -200,14 +182,14 @@ const LoginPage = () => {
                 <CardContent className="p-0 space-y-6">
                   <form onSubmit={handleRegister} className="space-y-5">
                     <div className="space-y-2">
-                      <Label htmlFor="register-company">Company Name</Label>
+                      <Label htmlFor="register-company">Nome da loja</Label>
                       <div className="relative">
                         <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                         <Input
                           id="register-company"
                           data-testid="register-company-input"
                           type="text"
-                          placeholder="Your Company Name"
+                          placeholder="Ex.: Vapor Serrano"
                           className="pl-10 h-12"
                           value={registerForm.companyName}
                           onChange={(e) => setRegisterForm({ ...registerForm, companyName: e.target.value })}
@@ -217,14 +199,14 @@ const LoginPage = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="register-name">Full Name</Label>
+                      <Label htmlFor="register-name">Seu nome</Label>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                         <Input
                           id="register-name"
                           data-testid="register-name-input"
                           type="text"
-                          placeholder="Your Name"
+                          placeholder="Nome completo"
                           className="pl-10 h-12"
                           value={registerForm.name}
                           onChange={(e) => setRegisterForm({ ...registerForm, name: e.target.value })}
@@ -234,14 +216,14 @@ const LoginPage = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="register-email">Email</Label>
+                      <Label htmlFor="register-email">E-mail</Label>
                       <div className="relative">
                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                         <Input
                           id="register-email"
                           data-testid="register-email-input"
                           type="email"
-                          placeholder="admin@company.com"
+                          placeholder="voce@email.com"
                           className="pl-10 h-12"
                           value={registerForm.email}
                           onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
@@ -251,14 +233,14 @@ const LoginPage = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="register-password">Password</Label>
+                      <Label htmlFor="register-password">Senha</Label>
                       <div className="relative">
                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                         <Input
                           id="register-password"
                           data-testid="register-password-input"
                           type="password"
-                          placeholder="Create a strong password"
+                          placeholder="Mínimo 6 caracteres"
                           className="pl-10 h-12"
                           value={registerForm.password}
                           onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
@@ -269,30 +251,30 @@ const LoginPage = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="register-master-key">Authorization Key</Label>
+                      <Label htmlFor="register-master-key">Chave de autorização</Label>
                       <div className="relative">
                         <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                         <Input
                           id="register-master-key"
                           data-testid="register-master-key-input"
                           type="password"
-                          placeholder="Contact the system administrator"
+                          placeholder="Fornecida pelo administrador do sistema"
                           className="pl-10 h-12"
                           value={registerForm.masterKey}
                           onChange={(e) => setRegisterForm({ ...registerForm, masterKey: e.target.value })}
                           required
                         />
                       </div>
-                      <p className="text-xs text-slate-400">Required to create a new company. Contact the administrator to get this key.</p>
+                      <p className="text-xs text-slate-400">Necessária para criar uma nova loja.</p>
                     </div>
 
                     <Button
                       type="submit"
                       data-testid="register-submit-btn"
-                      className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white font-semibold"
+                      className="w-full h-12 font-semibold"
                       disabled={loading}
                     >
-                      {loading ? 'Creating...' : 'Create Company & Account'}
+                      {loading ? 'Criando...' : 'Criar loja e conta'}
                     </Button>
                   </form>
                 </CardContent>
@@ -304,11 +286,11 @@ const LoginPage = () => {
           <Dialog open={resetDialogOpen} onOpenChange={handleCloseReset}>
             <DialogContent data-testid="reset-password-dialog">
               <DialogHeader>
-                <DialogTitle className="font-heading">Forgot Password?</DialogTitle>
+                <DialogTitle className="font-heading">Esqueceu a senha?</DialogTitle>
                 <DialogDescription>
                   {resetSent
-                    ? 'Request sent. Please wait for your administrator to contact you.'
-                    : 'Enter your email and your company administrators will be notified to reset your password.'}
+                    ? 'Pedido enviado. Aguarde o contato do administrador.'
+                    : 'Informe seu e-mail e os administradores da loja serão avisados para redefinir sua senha.'}
                 </DialogDescription>
               </DialogHeader>
 
@@ -319,28 +301,27 @@ const LoginPage = () => {
                       <Mail className="h-7 w-7 text-green-600" />
                     </div>
                     <div>
-                      <p className="font-semibold text-slate-900">Admins notified!</p>
+                      <p className="font-semibold text-slate-900">Administradores avisados!</p>
                       <p className="text-sm text-slate-500 mt-1">
-                        Your administrators have received an email with your reset request.
-                        They will set a new password and contact you directly.
+                        Eles vão definir uma nova senha e falar com você.
                       </p>
                     </div>
                   </div>
                   <DialogFooter>
-                    <Button onClick={handleCloseReset} className="w-full">Close</Button>
+                    <Button onClick={handleCloseReset} className="w-full">Fechar</Button>
                   </DialogFooter>
                 </div>
               ) : (
                 <form onSubmit={handleResetPassword} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="reset-email">Your Email</Label>
+                    <Label htmlFor="reset-email">Seu e-mail</Label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                       <Input
                         id="reset-email"
                         data-testid="reset-email-input"
                         type="email"
-                        placeholder="your@email.com"
+                        placeholder="voce@email.com"
                         className="pl-10"
                         value={resetEmail}
                         onChange={(e) => setResetEmail(e.target.value)}
@@ -348,15 +329,15 @@ const LoginPage = () => {
                       />
                     </div>
                     <p className="text-xs text-slate-400">
-                      Must match the email registered in the system.
+                      Use o e-mail cadastrado no sistema.
                     </p>
                   </div>
                   <DialogFooter>
                     <Button type="button" variant="outline" onClick={handleCloseReset}>
-                      Cancel
+                      Cancelar
                     </Button>
                     <Button type="submit" disabled={resetting} data-testid="reset-password-submit-btn">
-                      {resetting ? 'Sending...' : 'Notify Admins'}
+                      {resetting ? 'Enviando...' : 'Avisar administradores'}
                     </Button>
                   </DialogFooter>
                 </form>

@@ -15,7 +15,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../components/ui/alert-dialog';
-import { Receipt, Plus, Eye, XCircle, FileText, Search } from 'lucide-react';
+import { Receipt, Plus, Eye, XCircle, FileText, Search, ShoppingCart } from 'lucide-react';
+import PageHeader from '../components/layout/PageHeader';
 import ItemLines, { SELECT_CLASS, emptyLine, linesTotal } from '../components/store/ItemLines';
 import {
   PAYMENT_METHODS, apiError, formatDateTime, openInvoice, paymentLabel, tzOffset,
@@ -132,15 +133,11 @@ const SalesPage = () => {
 
   return (
     <div className="space-y-6" data-testid="sales-page">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-3xl font-bold tracking-tight text-slate-900">Vendas</h1>
-          <p className="text-slate-500 mt-1">Cada venda baixa o estoque e gera uma fatura em PDF</p>
-        </div>
+      <PageHeader icon={ShoppingCart} title="Vendas" subtitle="Cada venda baixa o estoque e gera uma fatura em PDF">
         <Button onClick={openNew} disabled={available.length === 0} data-testid="new-sale-btn">
           <Plus className="h-4 w-4 mr-2" /> Nova venda
         </Button>
-      </div>
+      </PageHeader>
 
       {!loading && available.length === 0 && (
         <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">

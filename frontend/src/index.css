@@ -1,22 +1,28 @@
-@import url('https://fonts.googleapis.com/css2?family=Chivo:wght@400;500;600;700;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ===================================================================
+   Vapor Serrano — identidade visual
+   Tema escuro único: preto azulado, roxo e azul neon (cores do logo)
+   =================================================================== */
+
 body {
     margin: 0;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
 
 code {
-    font-family: 'JetBrains Mono', source-code-pro, Menlo, Monaco, Consolas, monospace;
+    font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
 }
 
 .font-heading {
-    font-family: 'Chivo', sans-serif;
+    font-family: 'Exo 2', 'Inter', sans-serif;
+    letter-spacing: -0.01em;
 }
 
 .font-mono {
@@ -24,53 +30,43 @@ code {
 }
 
 @layer base {
-    :root {
-        --background: 210 40% 98%;
-        --foreground: 222 47% 11%;
-        --card: 0 0% 100%;
-        --card-foreground: 222 47% 11%;
-        --popover: 0 0% 100%;
-        --popover-foreground: 222 47% 11%;
-        --primary: 222 47% 11%;
-        --primary-foreground: 210 40% 98%;
-        --secondary: 210 40% 96%;
-        --secondary-foreground: 222 47% 11%;
-        --muted: 210 40% 96%;
-        --muted-foreground: 215 16% 47%;
-        --accent: 217 91% 60%;
-        --accent-foreground: 0 0% 100%;
-        --destructive: 0 84% 60%;
-        --destructive-foreground: 0 0% 100%;
-        --border: 214 32% 91%;
-        --input: 214 32% 91%;
-        --ring: 222 47% 11%;
-        --chart-1: 142 76% 36%;
-        --chart-2: 217 91% 60%;
-        --chart-3: 45 93% 47%;
-        --chart-4: 0 84% 60%;
-        --chart-5: 262 83% 58%;
-        --radius: 0.5rem;
-    }
+    :root,
     .dark {
-        --background: 222 47% 11%;
-        --foreground: 210 40% 98%;
-        --card: 222 47% 11%;
-        --card-foreground: 210 40% 98%;
-        --popover: 222 47% 11%;
-        --popover-foreground: 210 40% 98%;
-        --primary: 210 40% 98%;
-        --primary-foreground: 222 47% 11%;
-        --secondary: 217 33% 17%;
-        --secondary-foreground: 210 40% 98%;
-        --muted: 217 33% 17%;
-        --muted-foreground: 215 20% 65%;
-        --accent: 217 91% 60%;
-        --accent-foreground: 0 0% 100%;
-        --destructive: 0 62% 30%;
-        --destructive-foreground: 210 40% 98%;
-        --border: 217 33% 17%;
-        --input: 217 33% 17%;
-        --ring: 210 40% 98%;
+        --background: 240 33% 4%;          /* #07070f */
+        --foreground: 240 20% 96%;
+        --card: 240 30% 8%;                /* #0e0e1a */
+        --card-foreground: 240 20% 96%;
+        --popover: 240 30% 9%;
+        --popover-foreground: 240 20% 96%;
+        --primary: 262 83% 63%;            /* roxo #8b5cf6 */
+        --primary-foreground: 0 0% 100%;
+        --secondary: 240 22% 14%;
+        --secondary-foreground: 240 20% 96%;
+        --muted: 240 22% 12%;
+        --muted-foreground: 240 10% 66%;
+        --accent: 262 40% 20%;
+        --accent-foreground: 240 20% 96%;
+        --destructive: 350 89% 60%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 240 20% 18%;
+        --input: 240 20% 20%;
+        --ring: 262 83% 63%;
+        --chart-1: 262 83% 66%;
+        --chart-2: 217 91% 60%;
+        --chart-3: 173 80% 40%;
+        --chart-4: 38 92% 50%;
+        --chart-5: 350 89% 60%;
+        --radius: 0.75rem;
+
+        /* tokens da marca */
+        --brand-purple: #8b5cf6;
+        --brand-violet: #6d28d9;
+        --brand-blue: #3b82f6;
+        --brand-cyan: #22d3ee;
+        --brand-teal: #14b8a6;
+        --brand-amber: #f59e0b;
+        --brand-rose: #f43f5e;
+        --brand-gradient: linear-gradient(90deg, #a855f7 0%, #6366f1 55%, #0ea5e9 100%);
     }
 }
 
@@ -83,73 +79,45 @@ code {
     }
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+/* Texto com gradiente da marca */
+.text-brand-gradient {
+    background: var(--brand-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
 }
 
-::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-}
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #0b0b16; border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: #2a2a44; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3b3b5c; }
 
 /* Animations */
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes slideIn {
     from { opacity: 0; transform: translateX(-20px); }
     to { opacity: 1; transform: translateX(0); }
 }
-
-.animate-fade-in {
-    animation: fadeIn 0.3s ease-out forwards;
-}
-
-.animate-slide-in {
-    animation: slideIn 0.3s ease-out forwards;
-}
-
-/* Stagger animations */
+.animate-fade-in { animation: fadeIn 0.3s ease-out both; }
+.animate-slide-in { animation: slideIn 0.3s ease-out both; }
 .stagger-1 { animation-delay: 0.05s; }
 .stagger-2 { animation-delay: 0.1s; }
 .stagger-3 { animation-delay: 0.15s; }
 .stagger-4 { animation-delay: 0.2s; }
 .stagger-5 { animation-delay: 0.25s; }
 
-/* Status badges */
-.status-ok {
-    @apply inline-flex items-center rounded-full border border-emerald-200 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 bg-emerald-50;
-}
-
-.status-low {
-    @apply inline-flex items-center rounded-full border border-amber-200 px-2.5 py-0.5 text-xs font-semibold text-amber-700 bg-amber-50;
-}
-
-.status-critical {
-    @apply inline-flex items-center rounded-full border border-rose-200 px-2.5 py-0.5 text-xs font-semibold text-rose-700 bg-rose-50;
-}
-
 /* Card hover effects */
 .card-hover {
-    @apply transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
+    @apply transition-all duration-200 hover:-translate-y-0.5;
 }
 
 /* Focus states */
 .focus-ring {
-    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2;
 }
 
 @layer base {
@@ -158,50 +126,65 @@ code {
     }
 }
 
-/* ===== DARK MODE GLOBAL OVERRIDES ===== */
-/* Faz todas as classes slate funcionarem no dark mode automaticamente */
-.dark .text-slate-900 { color: hsl(210 40% 96%) !important; }
-.dark .text-slate-800 { color: hsl(210 40% 90%) !important; }
-.dark .text-slate-700 { color: hsl(210 30% 80%) !important; }
-.dark .text-slate-600 { color: hsl(210 25% 70%) !important; }
-.dark .text-slate-500 { color: hsl(215 20% 60%) !important; }
-.dark .text-slate-400 { color: hsl(215 20% 55%) !important; }
-.dark .text-slate-300 { color: hsl(215 20% 50%) !important; }
+/* ===== Mapeia as classes slate/white das páginas para a paleta escura ===== */
+.dark .text-slate-900 { color: #f4f4fb !important; }
+.dark .text-slate-800 { color: #e4e4f0 !important; }
+.dark .text-slate-700 { color: #cfcfe0 !important; }
+.dark .text-slate-600 { color: #b4b4c8 !important; }
+.dark .text-slate-500 { color: #9a9ab3 !important; }
+.dark .text-slate-400 { color: #7c7c96 !important; }
+.dark .text-slate-300 { color: #5c5c75 !important; }
 
-.dark .bg-white { background-color: hsl(222 47% 13%) !important; }
-.dark .bg-slate-50 { background-color: hsl(222 47% 12%) !important; }
-.dark .bg-slate-100 { background-color: hsl(217 33% 18%) !important; }
-.dark .bg-slate-200 { background-color: hsl(217 33% 22%) !important; }
+.dark .bg-white { background-color: #0e0e1a !important; }
+.dark .bg-slate-50 { background-color: #12121f !important; }
+.dark .bg-slate-100 { background-color: #1a1a2b !important; }
+.dark .bg-slate-200 { background-color: #222236 !important; }
 
-.dark .border-slate-200 { border-color: hsl(217 33% 20%) !important; }
-.dark .border-slate-100 { border-color: hsl(217 33% 17%) !important; }
+.dark .border-slate-200 { border-color: #24243a !important; }
+.dark .border-slate-100 { border-color: #1c1c2e !important; }
 
-.dark .hover\:bg-slate-50:hover { background-color: hsl(222 47% 15%) !important; }
-.dark .hover\:bg-slate-100:hover { background-color: hsl(217 33% 20%) !important; }
+.dark .hover\:bg-slate-50:hover { background-color: #161626 !important; }
+.dark .hover\:bg-slate-100:hover { background-color: #1e1e31 !important; }
 
-/* Cards no dark mode */
-.dark [class*="card"] {
-    background-color: hsl(222 47% 13%);
-    border-color: hsl(217 33% 20%);
-    color: hsl(210 40% 96%);
+/* Pílulas coloridas (classes ABC, avisos) ficam translúcidas no escuro */
+.dark .bg-emerald-100, .dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.14) !important; }
+.dark .text-emerald-700, .dark .text-emerald-600 { color: #34d399 !important; }
+.dark .bg-amber-100, .dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.14) !important; }
+.dark .text-amber-700, .dark .text-amber-600 { color: #fbbf24 !important; }
+.dark .border-amber-200 { border-color: rgba(245, 158, 11, 0.35) !important; }
+.dark .bg-rose-50, .dark .bg-red-50 { background-color: rgba(244, 63, 94, 0.12) !important; }
+.dark .text-rose-600, .dark .text-red-700, .dark .text-red-800 { color: #fb7185 !important; }
+.dark .border-red-200, .dark .border-red-300 { border-color: rgba(244, 63, 94, 0.45) !important; }
+.dark .bg-blue-100, .dark .bg-blue-50 { background-color: rgba(139, 92, 246, 0.16) !important; }
+.dark .text-blue-700, .dark .text-blue-600 { color: #a78bfa !important; }
+
+/* Cards */
+.dark .rounded-xl.border.bg-card {
+    background: linear-gradient(180deg, #10101d 0%, #0c0c17 100%);
+    border-color: #23233a;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset;
 }
 
-/* Inputs no dark mode */
+/* Inputs */
 .dark input, .dark textarea, .dark select {
-    background-color: hsl(217 33% 17%) !important;
-    border-color: hsl(217 33% 25%) !important;
-    color: hsl(210 40% 96%) !important;
+    background-color: #12121f !important;
+    border-color: #2a2a42 !important;
+    color: #f4f4fb !important;
 }
+.dark input:focus, .dark textarea:focus, .dark select:focus {
+    border-color: #8b5cf6 !important;
+    box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.5);
+    outline: none;
+}
+.dark input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.8); }
+.dark option { background-color: #12121f; }
 
-/* Blue/Orange team badges ficam intactos no dark */
-.dark .bg-blue-50 { background-color: hsl(213 94% 12%) !important; }
-.dark .bg-orange-50 { background-color: hsl(24 95% 12%) !important; }
-.dark .border-blue-200 { border-color: hsl(213 70% 25%) !important; }
-.dark .border-orange-200 { border-color: hsl(24 70% 25%) !important; }
-
-/* Scrollbar dark */
-.dark ::-webkit-scrollbar-track { background: hsl(222 47% 11%); }
-.dark ::-webkit-scrollbar-thumb { background: hsl(217 33% 25%); }
+/* Botão primário com gradiente roxo */
+.dark .bg-primary {
+    background-image: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%);
+    box-shadow: 0 4px 18px rgba(124, 58, 237, 0.35);
+}
+.dark .bg-primary:hover { filter: brightness(1.1); }
 
 /* Hide Emergent badge on mobile to avoid navigation issues */
 [data-testid="emergent-badge"],

@@ -9,6 +9,7 @@ import { Label } from '../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { toast } from 'sonner';
 import { BarChart3, Wallet } from 'lucide-react';
+import PageHeader from '../components/layout/PageHeader';
 import { apiError, commissionLabel, formatDateTime, lastDays, tzOffset } from '../lib/store';
 
 import { API_URL as API } from '../config';
@@ -63,12 +64,8 @@ const ReportsPage = () => {
 
   return (
     <div className="space-y-6" data-testid="reports-page">
-      <div>
-        <h1 className="font-heading text-3xl font-bold tracking-tight text-slate-900">Relatórios</h1>
-        <p className="text-slate-500 mt-1">
-          {isAdmin ? 'Curva ABC para repor o que mais vende e comissão dos funcionários' : 'Suas comissões'}
-        </p>
-      </div>
+      <PageHeader icon={BarChart3} title="Relatórios"
+        subtitle={isAdmin ? 'Curva ABC para repor o que mais vende e comissão dos funcionários' : 'Suas comissões'} />
 
       {/* Período */}
       <Card>

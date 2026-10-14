@@ -16,6 +16,7 @@ import {
 } from '../components/ui/alert-dialog';
 import { Users, Plus, Pencil, Trash2, Shield, User } from 'lucide-react';
 import { SELECT_CLASS } from '../components/store/ItemLines';
+import PageHeader from '../components/layout/PageHeader';
 import { apiError, commissionLabel } from '../lib/store';
 
 import { API_URL as API } from '../config';
@@ -113,15 +114,11 @@ const UsersPage = () => {
 
   return (
     <div className="space-y-8" data-testid="users-page">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-3xl font-bold tracking-tight text-slate-900">Usuários</h1>
-          <p className="text-slate-500 mt-1">Funcionários, permissões e comissão</p>
-        </div>
+      <PageHeader icon={Users} title="Usuários" subtitle="Funcionários, permissões e comissão">
         <Button onClick={openNewDialog} data-testid="new-user-btn">
           <Plus className="h-4 w-4 mr-2" /> Novo usuário
         </Button>
-      </div>
+      </PageHeader>
 
       <Card>
         <CardContent className="p-0">

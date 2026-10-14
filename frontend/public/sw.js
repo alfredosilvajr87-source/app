@@ -1,4 +1,4 @@
-const CACHE = 'vape-store-v1';
+const CACHE = 'vapor-serrano-v1';
 const OFFLINE_URL = '/';
 
 const PRECACHE = [

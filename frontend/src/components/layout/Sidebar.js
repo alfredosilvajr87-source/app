@@ -2,76 +2,61 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { cn } from '../../lib/utils';
 import {
-  LayoutDashboard,
+  Home,
+  ShoppingCart,
   Package,
-  Receipt,
-  Truck,
+  Box,
   BarChart3,
-  Settings,
-  Store,
-  ChevronLeft,
   Users,
+  Settings,
   Lock
 } from 'lucide-react';
-import { Button } from '../ui/button';
 
-const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {
+export const BrandLockup = ({ collapsed = false }) => (
+  <div className="sidebar-brand">
+    <img src="/logo-mark.png" alt="Vapor Serrano" />
+    {!collapsed && (
+      <div className="brand-wordmark">
+        <span className="brand-name">VAPOR <span className="text-brand-gradient">SERRANO</span></span>
+        <span className="brand-tagline">VAPES • LÍQUIDOS • ACESSÓRIOS</span>
+      </div>
+    )}
+  </div>
+);
+
+const Sidebar = ({ collapsed, mobileOpen, setMobileOpen }) => {
   const location = useLocation();
   const { isAdmin } = useAuth();
 
   const navItems = [
-    { path: '/',          label: 'Painel',        icon: LayoutDashboard },
-    { path: '/sales',     label: 'Vendas',        icon: Receipt },
-    { path: '/purchases', label: 'Compras',       icon: Truck },
-    { path: '/products',  label: 'Produtos',      icon: Package },
+    { path: '/',          label: 'Painel',        icon: Home },
+    { path: '/sales',     label: 'Vendas',        icon: ShoppingCart },
+    { path: '/purchases', label: 'Compras',       icon: Package },
+    { path: '/products',  label: 'Produtos',      icon: Box },
     { path: '/reports',   label: 'Relatórios',    icon: BarChart3 },
-    { path: '/users',    label: 'Usuários',      icon: Users,     adminOnly: true },
+    { path: '/users',     label: 'Usuários',      icon: Users,     adminOnly: true },
     { path: '/settings',  label: 'Configurações', icon: Settings },
   ];
 
-  // Bottom nav items (mobile) — most used by staff
+  // Barra inferior (celular) — telas mais usadas no balcão
   const bottomNavItems = [
-    { path: '/',          label: 'Painel',   icon: LayoutDashboard },
-    { path: '/sales',     label: 'Vendas',   icon: Receipt },
-    { path: '/purchases', label: 'Compras',  icon: Truck },
-    { path: '/products',  label: 'Produtos', icon: Package },
+    { path: '/',          label: 'Painel',     icon: Home },
+    { path: '/sales',     label: 'Vendas',     icon: ShoppingCart },
+    { path: '/purchases', label: 'Compras',    icon: Package },
+    { path: '/products',  label: 'Produtos',   icon: Box },
     { path: '/reports',   label: 'Relatórios', icon: BarChart3 },
   ];
 
   return (
     <>
-      {/* Mobile overlay */}
       {mobileOpen && (
-        <div
-          className="sidebar-overlay lg:hidden"
-          onClick={() => setMobileOpen(false)}
-          data-testid="sidebar-overlay"
-        />
+        <div className="sidebar-overlay lg:hidden" onClick={() => setMobileOpen(false)} />
       )}
 
-      <aside
-        className={cn('sidebar', collapsed && 'sidebar-collapsed', mobileOpen && 'open')}
-        data-testid="sidebar"
-      >
-        {/* Logo */}
-        <div className="sidebar-logo-area">
-          <div className="flex items-center gap-3">
-            <div className="sidebar-logo-icon flex-shrink-0">
-              <Store className="h-5 w-5 text-white" />
-            </div>
-            {!collapsed && (
-              <div className="overflow-hidden">
-                <h1 className="font-heading text-base font-black tracking-tight text-white">
-                  Vape Store
-                </h1>
-                <p className="text-xs text-slate-500">Estoque e vendas</p>
-              </div>
-            )}
-          </div>
-        </div>
+      <aside className={cn('sidebar', collapsed && 'sidebar-collapsed', mobileOpen && 'open')} data-testid="sidebar">
+        <BrandLockup collapsed={collapsed} />
 
-        {/* Navigation */}
-        <nav className="flex-1 py-3 overflow-y-auto">
+        <nav className="sidebar-nav">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -81,14 +66,14 @@ const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {
                 key={item.path}
                 to={item.path}
                 onClick={() => setMobileOpen(false)}
-                data-testid={`nav-${item.path.replace('/', '') || 'dashboard'}`}
+                title={collapsed ? item.label : undefined}
                 className={cn('sidebar-nav-item', isActive && 'active')}
               >
-                <Icon className="h-4 w-4 flex-shrink-0" />
+                <Icon />
                 {!collapsed && (
-                  <span className="flex items-center gap-2 text-sm">
+                  <span className="flex items-center gap-2">
                     {item.label}
-                    {item.adminOnly && <Lock className="h-3 w-3 opacity-40" />}
+                    {item.adminOnly && <Lock className="!h-3.5 !w-3.5 opacity-50" />}
                   </span>
                 )}
               </NavLink>
@@ -96,31 +81,19 @@ const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {
           })}
         </nav>
 
-        {/* Collapse button - desktop only */}
-        <div className="hidden lg:block p-3 border-t border-slate-800">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setCollapsed(!collapsed)}
-            className="w-full justify-center text-slate-400 hover:text-white hover:bg-slate-800"
-            data-testid="sidebar-collapse-btn"
-          >
-            <ChevronLeft className={cn('h-4 w-4 transition-transform', collapsed && 'rotate-180')} />
-          </Button>
-        </div>
+        {!collapsed && (
+          <div className="sidebar-slogan">
+            <span>Mais que vapor,</span><br />é estilo de vida.
+          </div>
+        )}
       </aside>
 
-      {/* Mobile bottom navigation */}
       <nav className="bottom-nav lg:hidden">
         {bottomNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
           return (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={cn('bottom-nav-item', isActive && 'active')}
-            >
+            <NavLink key={item.path} to={item.path} className={cn('bottom-nav-item', isActive && 'active')}>
               <Icon className="h-5 w-5" />
               <span>{item.label}</span>
             </NavLink>

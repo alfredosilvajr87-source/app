@@ -15,7 +15,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../components/ui/alert-dialog';
-import { Truck, Plus, Eye, XCircle } from 'lucide-react';
+import { Truck, Plus, Eye, XCircle, Package } from 'lucide-react';
+import PageHeader from '../components/layout/PageHeader';
 import ItemLines, { emptyLine, linesTotal } from '../components/store/ItemLines';
 import { apiError, formatDateTime, tzOffset } from '../lib/store';
 
@@ -96,15 +97,11 @@ const PurchasesPage = () => {
 
   return (
     <div className="space-y-6" data-testid="purchases-page">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-3xl font-bold tracking-tight text-slate-900">Compras</h1>
-          <p className="text-slate-500 mt-1">Entrada de mercadoria — cada compra soma ao estoque</p>
-        </div>
+      <PageHeader icon={Package} title="Compras" subtitle="Entrada de mercadoria — cada compra soma ao estoque">
         <Button onClick={openNew} disabled={products.length === 0} data-testid="new-purchase-btn">
           <Plus className="h-4 w-4 mr-2" /> Nova compra
         </Button>
-      </div>
+      </PageHeader>
 
       <Card>
         <CardContent className="p-0">

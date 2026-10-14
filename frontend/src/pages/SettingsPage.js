@@ -12,7 +12,8 @@ import { toast } from 'sonner';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '../components/ui/dialog';
-import { Building2, Save, Settings2, Upload, Image, Key, FileText } from 'lucide-react';
+import { Building2, Save, Settings2, Upload, Image, Key, FileText, Settings } from 'lucide-react';
+import PageHeader from '../components/layout/PageHeader';
 import { SELECT_CLASS } from '../components/store/ItemLines';
 import { apiError } from '../lib/store';
 
@@ -101,12 +102,7 @@ const SettingsPage = () => {
 
   return (
     <div className="space-y-8" data-testid="settings-page">
-      <div>
-        <h1 className="font-heading text-3xl font-bold tracking-tight text-slate-900">Configurações</h1>
-        <p className="text-slate-500 mt-1">
-          {isAdmin ? 'Dados da loja, fatura e conta' : 'Sua conta'}
-        </p>
-      </div>
+      <PageHeader icon={Settings} title="Configurações" subtitle={isAdmin ? 'Dados da loja, fatura e conta' : 'Sua conta'} />
 
       {isAdmin && (
         <Card>
