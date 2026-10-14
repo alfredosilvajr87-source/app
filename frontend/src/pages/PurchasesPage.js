@@ -15,7 +15,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../components/ui/alert-dialog';
-import { Truck, Plus, Eye, XCircle, Package } from 'lucide-react';
+import { Truck, Plus, Eye, XCircle, Package, Pencil, BadgeCheck } from 'lucide-react';
+import DocStatus, { canEdit } from '../components/store/DocStatus';
 import PageHeader from '../components/layout/PageHeader';
 import ItemLines, { emptyLine, linesTotal } from '../components/store/ItemLines';
 import { apiError, formatDateTime, tzOffset } from '../lib/store';
@@ -23,7 +24,7 @@ import { apiError, formatDateTime, tzOffset } from '../lib/store';
 import { API_URL as API } from '../config';
 
 const PurchasesPage = () => {
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { money } = useStore();
   const [purchases, setPurchases] = useState([]);
   const [products, setProducts] = useState([]);
@@ -34,9 +35,15 @@ const PurchasesPage = () => {
   const [lines, setLines] = useState([emptyLine()]);
   const [viewing, setViewing] = useState(null);
   const [cancelling, setCancelling] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [reviewing, setReviewing] = useState(null);
+
+  const [todayClosed, setTodayClosed] = useState(false);
 
   useEffect(() => {
     fetchData();
+    axios.get(`${API}/cash/day`, { params: { tz_offset: tzOffset() } })
+      .then((r) => setTodayClosed(r.data.closed)).catch(() => {});
   }, []);
 
   const fetchData = async () => {
@@ -55,31 +62,58 @@ const PurchasesPage = () => {
   };
 
   const openNew = () => {
+    setEditing(null);
     setHeader({ supplier: '', supplier_doc: '', notes: '' });
     setLines([emptyLine()]);
+    setFormOpen(true);
+  };
+
+  const openEdit = (p) => {
+    setViewing(null);
+    setEditing(p);
+    setHeader({ supplier: p.supplier || '', supplier_doc: p.supplier_doc || '', notes: p.notes || '' });
+    setLines(p.items.map((l) => ({ product_id: l.product_id, quantity: String(l.quantity), price: String(l.unit_cost) })));
     setFormOpen(true);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
+    const payload = {
+      ...header,
+      tz_offset: tzOffset(),
+      items: lines.map((l) => ({
+        product_id: l.product_id,
+        quantity: parseInt(l.quantity),
+        unit_cost: parseFloat(l.price) || 0,
+      })),
+    };
     try {
-      const res = await axios.post(`${API}/purchases`, {
-        ...header,
-        tz_offset: tzOffset(),
-        items: lines.map((l) => ({
-          product_id: l.product_id,
-          quantity: parseInt(l.quantity),
-          unit_cost: parseFloat(l.price) || 0,
-        })),
-      });
-      toast.success(`Compra ${res.data.number} registrada — estoque atualizado`);
+      if (editing) {
+        const res = await axios.put(`${API}/purchases/${editing.id}`, payload);
+        toast.success(`Compra ${res.data.number} atualizada — estoque ajustado`);
+      } else {
+        const res = await axios.post(`${API}/purchases`, payload);
+        toast.success(`Compra ${res.data.number} registrada — estoque atualizado`);
+      }
       setFormOpen(false);
       fetchData();
     } catch (err) {
-      toast.error(apiError(err, 'Falha ao registrar compra'));
+      toast.error(apiError(err, 'Falha ao salvar a compra'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleReview = async () => {
+    try {
+      const res = await axios.post(`${API}/purchases/${reviewing.id}/review`);
+      toast.success(res.data.message);
+      setReviewing(null);
+      setViewing(null);
+      fetchData();
+    } catch (err) {
+      toast.error(apiError(err));
     }
   };
 
@@ -98,10 +132,16 @@ const PurchasesPage = () => {
   return (
     <div className="space-y-6" data-testid="purchases-page">
       <PageHeader icon={Package} title="Compras" subtitle="Entrada de mercadoria — cada compra soma ao estoque">
-        <Button onClick={openNew} disabled={products.length === 0} data-testid="new-purchase-btn">
+        <Button onClick={openNew} disabled={todayClosed || products.length === 0} data-testid="new-purchase-btn">
           <Plus className="h-4 w-4 mr-2" /> Nova compra
         </Button>
       </PageHeader>
+
+      {todayClosed && (
+        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+          O caixa de hoje já foi fechado. Novas compras só depois que um administrador reabrir o caixa.
+        </p>
+      )}
 
       <Card>
         <CardContent className="p-0">
@@ -122,23 +162,29 @@ const PurchasesPage = () => {
                 <thead>
                   <tr>
                     <th>Número</th><th>Data</th><th>Fornecedor</th><th className="text-right">Itens</th>
-                    <th className="text-right">Total</th><th>Status</th><th />
+                    <th className="text-right">Total</th><th>Situação</th><th />
                   </tr>
                 </thead>
                 <tbody>
                   {purchases.map((p) => (
                     <tr key={p.id} className={p.status === 'cancelada' ? 'opacity-50' : ''}>
                       <td className="font-mono font-medium">{p.number}</td>
-                      <td className="text-sm">{formatDateTime(p.created_at)}</td>
+                      <td className="text-sm whitespace-nowrap">{formatDateTime(p.created_at)}</td>
                       <td>{p.supplier || '—'}</td>
                       <td className="text-right font-mono">{p.items.reduce((s, i) => s + i.quantity, 0)}</td>
                       <td className="text-right font-mono">{money(p.total)}</td>
-                      <td>
-                        <span className={p.status === 'cancelada' ? 'status-critical' : 'status-ok'}>
-                          {p.status === 'cancelada' ? 'Cancelada' : 'Concluída'}
-                        </span>
-                      </td>
-                      <td className="text-right">
+                      <td><DocStatus doc={p} /></td>
+                      <td className="text-right whitespace-nowrap">
+                        {canEdit(p, user, isAdmin) && (
+                          <Button variant="ghost" size="icon" title="Editar" onClick={() => openEdit(p)}>
+                            <Pencil className="h-4 w-4 text-slate-400" />
+                          </Button>
+                        )}
+                        {isAdmin && p.status === 'concluida' && !p.reviewed && (
+                          <Button variant="ghost" size="icon" title="Revisar" onClick={() => setReviewing(p)}>
+                            <BadgeCheck className="h-4 w-4 text-sky-400" />
+                          </Button>
+                        )}
                         <Button variant="ghost" size="icon" title="Ver detalhes" onClick={() => setViewing(p)}>
                           <Eye className="h-4 w-4 text-slate-500" />
                         </Button>
@@ -156,9 +202,11 @@ const PurchasesPage = () => {
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="font-heading">Nova compra</DialogTitle>
+            <DialogTitle className="font-heading">{editing ? `Editar compra ${editing.number}` : 'Nova compra'}</DialogTitle>
             <DialogDescription>
-              Os itens entram no estoque ao salvar. O custo do produto é atualizado pelo custo médio.
+              {editing
+                ? 'O estoque é ajustado pela diferença. Não é possível reduzir itens que já foram vendidos. Depois de revisada, a compra não pode mais ser editada.'
+                : 'Os itens entram no estoque ao salvar. O custo do produto é atualizado pelo custo médio.'}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -191,7 +239,7 @@ const PurchasesPage = () => {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Cancelar</Button>
-              <Button type="submit" disabled={saving}>{saving ? 'Salvando…' : 'Registrar compra'}</Button>
+              <Button type="submit" disabled={saving}>{saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Registrar compra'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -209,6 +257,7 @@ const PurchasesPage = () => {
           </DialogHeader>
           {viewing && (
             <>
+              <DocStatus doc={viewing} />
               <table className="data-table">
                 <thead>
                   <tr><th>Produto</th><th className="text-right">Qtd</th><th className="text-right">Custo</th><th className="text-right">Total</th></tr>
@@ -224,19 +273,47 @@ const PurchasesPage = () => {
                   ))}
                 </tbody>
               </table>
-              {viewing.notes && <p className="text-sm text-slate-600">Obs.: {viewing.notes}</p>}
-              <div className="flex justify-between items-center">
+              <div className="text-sm text-slate-400 space-y-1">
+                {viewing.edited_at && <p>Editada em {formatDateTime(viewing.edited_at)} por {viewing.edited_by_name}</p>}
+                {viewing.reviewed && <p>Revisada em {formatDateTime(viewing.reviewed_at)} por {viewing.reviewed_by_name}</p>}
+                {viewing.notes && <p>Obs.: {viewing.notes}</p>}
+              </div>
+              <div className="flex flex-wrap justify-between items-center gap-2">
                 <span className="font-heading text-xl font-bold">{money(viewing.total)}</span>
-                {isAdmin && viewing.status !== 'cancelada' && (
-                  <Button variant="outline" className="text-red-700 border-red-300" onClick={() => setCancelling(viewing)}>
-                    <XCircle className="h-4 w-4 mr-2" /> Cancelar compra
-                  </Button>
-                )}
+                <div className="flex flex-wrap gap-2">
+                  {isAdmin && viewing.status !== 'cancelada' && !viewing.cash_closed && (
+                    <Button variant="outline" className="text-red-700 border-red-300" onClick={() => setCancelling(viewing)}>
+                      <XCircle className="h-4 w-4 mr-2" /> Cancelar
+                    </Button>
+                  )}
+                  {canEdit(viewing, user, isAdmin) && (
+                    <Button variant="outline" onClick={() => openEdit(viewing)}><Pencil className="h-4 w-4 mr-2" /> Editar</Button>
+                  )}
+                  {isAdmin && viewing.status === 'concluida' && !viewing.reviewed && (
+                    <Button onClick={() => setReviewing(viewing)}><BadgeCheck className="h-4 w-4 mr-2" /> Revisar</Button>
+                  )}
+                </div>
               </div>
             </>
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!reviewing} onOpenChange={(o) => !o && setReviewing(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revisar compra {reviewing?.number}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Confirme que itens, quantidades e custos batem com a nota do fornecedor ({reviewing && money(reviewing.total)}).
+              Depois de revisada, a compra <b>não poderá mais ser editada</b>.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleReview}>Confirmar revisão</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!cancelling} onOpenChange={(o) => !o && setCancelling(null)}>
         <AlertDialogContent>

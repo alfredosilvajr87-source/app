@@ -18,6 +18,7 @@ import {
 import { Package, Plus, Pencil, Trash2, Search, SlidersHorizontal, History, Sparkles, Tags, Box } from 'lucide-react';
 import { apiError, formatDateTime, productLabel, stockStatus } from '../lib/store';
 import PageHeader from '../components/layout/PageHeader';
+import { SELECT_CLASS } from '../components/store/ItemLines';
 import VapeIcon from '../components/store/VapeIcon';
 
 import { API_URL as API } from '../config';
@@ -25,6 +26,7 @@ import { API_URL as API } from '../config';
 const EMPTY_FORM = {
   name: '', brand: '', flavor: '', puffs: '', sku: '',
   cost_price: '', sale_price: '', min_stock: '', active: true,
+  commission_type: 'fixed', commission_value: '5',
 };
 
 const MOVEMENT_LABELS = { entrada: 'Entrada', saida: 'Saída', estorno: 'Estorno', ajuste: 'Ajuste' };
@@ -92,7 +94,7 @@ const ProductsPage = () => {
 
   const openEdit = (p) => {
     setEditing(p);
-    setForm({ ...p, puffs: p.puffs || '' });
+    setForm({ ...p, puffs: p.puffs || '', commission_type: p.commission_type || 'fixed', commission_value: String(p.commission_value ?? 5) });
     setFormOpen(true);
   };
 
@@ -108,6 +110,8 @@ const ProductsPage = () => {
       sale_price: parseFloat(form.sale_price) || 0,
       min_stock: parseInt(form.min_stock) || 0,
       active: form.active,
+      commission_type: form.commission_type,
+      commission_value: parseFloat(form.commission_value) || 0,
     };
     try {
       if (editing) {
@@ -233,6 +237,7 @@ const ProductsPage = () => {
                     <th>SKU</th>
                     <th className="text-right">Custo</th>
                     <th className="text-right">Venda</th>
+                    <th className="text-right">Comissão</th>
                     <th className="text-right">Estoque</th>
                     <th>Status</th>
                     <th className="text-right">Ações</th>
@@ -258,6 +263,7 @@ const ProductsPage = () => {
                         <td className="font-mono text-slate-500 whitespace-nowrap">{p.sku}</td>
                         <td className="text-right font-mono">{money(p.cost_price)}</td>
                         <td className="text-right font-mono">{money(p.sale_price)}</td>
+                        <td className="text-right font-mono text-sm whitespace-nowrap">{p.commission_type === 'percent' ? `${p.commission_value}%` : `${money(p.commission_value ?? 5)}/un`}</td>
                         <td className="text-right font-mono font-semibold">
                           {p.stock}
                           <span className="text-xs text-slate-400 font-normal"> / mín {p.min_stock}</span>
@@ -285,7 +291,7 @@ const ProductsPage = () => {
                     );
                   })}
                   {visible.length === 0 && (
-                    <tr><td colSpan={7} className="text-center text-slate-400 py-8">Nenhum produto encontrado</td></tr>
+                    <tr><td colSpan={8} className="text-center text-slate-400 py-8">Nenhum produto encontrado</td></tr>
                   )}
                 </tbody>
               </table>
@@ -346,6 +352,24 @@ const ProductsPage = () => {
                 <Switch checked={form.active} onCheckedChange={(v) => setForm({ ...form, active: v })} />
                 Ativo para venda
               </label>
+              <div className="col-span-2 rounded-xl border border-slate-200 p-3 grid grid-cols-2 gap-3">
+                <p className="col-span-2 text-sm font-medium text-white">Comissão do vendedor por este item</p>
+                <div className="space-y-1">
+                  <Label>Tipo</Label>
+                  <select className={SELECT_CLASS} value={form.commission_type}
+                    onChange={(e) => setForm({ ...form, commission_type: e.target.value })}>
+                    <option value="fixed">R$ por unidade vendida</option>
+                    <option value="percent">% do valor do item</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label>{form.commission_type === 'percent' ? 'Porcentagem (%)' : 'Valor por unidade'}</Label>
+                  <Input type="number" min="0" step="0.01" required
+                    max={form.commission_type === 'percent' ? 100 : undefined}
+                    value={form.commission_value}
+                    onChange={(e) => setForm({ ...form, commission_value: e.target.value })} />
+                </div>
+              </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Cancelar</Button>

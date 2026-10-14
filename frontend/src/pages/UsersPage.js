@@ -18,7 +18,7 @@ import {
 import { Users, Plus, Pencil, Trash2, Shield, User, KeyRound } from 'lucide-react';
 import { SELECT_CLASS } from '../components/store/ItemLines';
 import PageHeader from '../components/layout/PageHeader';
-import { apiError, commissionLabel } from '../lib/store';
+import { apiError } from '../lib/store';
 
 import { API_URL as API } from '../config';
 
@@ -63,8 +63,6 @@ const UsersPage = () => {
       phone: formData.phone.trim(),
       salary: parseFloat(formData.salary) || 0,
       active: formData.active,
-      commission_type: formData.commission_type,
-      commission_value: parseFloat(formData.commission_value) || 0,
       can_login: formData.can_login,
       role: formData.can_login ? formData.role : 'user',
     };
@@ -131,7 +129,7 @@ const UsersPage = () => {
 
   return (
     <div className="space-y-6" data-testid="users-page">
-      <PageHeader icon={Users} title="Funcionários" subtitle="Cadastro, salário, comissão e acesso ao sistema">
+      <PageHeader icon={Users} title="Funcionários" subtitle="Cadastro, salário e acesso ao sistema">
         <Button onClick={openNewDialog} data-testid="new-user-btn">
           <Plus className="h-4 w-4 mr-2" /> Novo funcionário
         </Button>
@@ -165,7 +163,7 @@ const UsersPage = () => {
                 <thead>
                   <tr>
                     <th>Funcionário</th><th>Contato</th><th className="text-right">Salário</th>
-                    <th>Comissão</th><th>Acesso</th><th className="text-right">Ações</th>
+                    <th>Acesso</th><th className="text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -192,7 +190,6 @@ const UsersPage = () => {
                         {!u.phone && !u.email && '—'}
                       </td>
                       <td className="text-right font-mono whitespace-nowrap">{u.salary ? money(u.salary) : '—'}</td>
-                      <td className="font-mono text-sm whitespace-nowrap">{commissionLabel(u.commission_type, u.commission_value, money)}</td>
                       <td>
                         {u.can_login === false ? (
                           <span className="text-xs text-slate-400">Sem acesso</span>
@@ -228,7 +225,7 @@ const UsersPage = () => {
           <DialogHeader>
             <DialogTitle className="font-heading">{editingUser ? 'Editar funcionário' : 'Novo funcionário'}</DialogTitle>
             <DialogDescription>
-              O salário entra no fechamento do mês. A comissão é calculada em cada venda feita a partir de agora.
+              O salário entra no resultado do mês (Financeiro). A comissão fica no cadastro de cada produto e é paga a quem fez a venda.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -254,27 +251,6 @@ const UsersPage = () => {
                 <Label>Salário fixo mensal</Label>
                 <Input type="number" min="0" step="0.01" value={formData.salary} placeholder="0,00"
                   onChange={(e) => set({ salary: e.target.value })} />
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 p-4 space-y-3">
-              <p className="font-medium text-white">Comissão</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label>Tipo</Label>
-                  <select className={SELECT_CLASS} value={formData.commission_type}
-                    onChange={(e) => set({ commission_type: e.target.value })}>
-                    <option value="fixed">Valor fixo por venda</option>
-                    <option value="percent">Porcentagem da venda</option>
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <Label>{formData.commission_type === 'percent' ? 'Porcentagem (%)' : 'Valor por venda'}</Label>
-                  <Input type="number" min="0" step="0.01" required
-                    max={formData.commission_type === 'percent' ? 100 : undefined}
-                    value={formData.commission_value}
-                    onChange={(e) => set({ commission_value: e.target.value })} />
-                </div>
               </div>
             </div>
 

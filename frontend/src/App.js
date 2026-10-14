@@ -12,6 +12,7 @@ import SalesPage from "./pages/SalesPage";
 import SettingsPage from "./pages/SettingsPage";
 import ReportsPage from "./pages/ReportsPage";
 import FinancePage from "./pages/FinancePage";
+import CashPage from "./pages/CashPage";
 import UsersPage from "./pages/UsersPage";
 import MasterPage from "./pages/MasterPage";
 
@@ -104,6 +105,7 @@ const AppRoutes = () => {
         <Route path="purchases" element={<PurchasesPage />} />
         <Route path="sales" element={<SalesPage />} />
         <Route path="reports" element={<ReportsPage />} />
+        <Route path="cash" element={<CashPage />} />
         <Route
           path="finance"
           element={

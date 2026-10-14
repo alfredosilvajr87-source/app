@@ -292,7 +292,7 @@ async def superadmin_delete_company(company_id: str, master_key: str = ""):
     await db.companies.delete_one({"id": company_id})
     # Delete other company data if collections exist
     for collection_name in ["products", "purchases", "sales", "stock_movements", "counters", "units", "settings",
-                            "expenses", "recurring_expenses", "month_closings"]:
+                            "expenses", "recurring_expenses", "month_closings", "cash_closings"]:
         try:
             collection = db[collection_name]
             await collection.delete_many({"company_id": company_id})
@@ -602,6 +602,8 @@ class ProductCreate(BaseModel):
     sale_price: float = Field(0, ge=0)
     min_stock: int = Field(0, ge=0)
     active: bool = True
+    commission_type: Literal["fixed", "percent"] = "fixed"   # fixed = R$ por unidade vendida
+    commission_value: float = Field(5.0, ge=0)
 
 class ProductResponse(BaseModel):
     id: str
@@ -616,6 +618,8 @@ class ProductResponse(BaseModel):
     min_stock: int = 0
     stock: int = 0
     active: bool = True
+    commission_type: str = "fixed"
+    commission_value: float = 5.0
     created_at: str
 
 class StockAdjust(BaseModel):
@@ -638,6 +642,7 @@ class SaleItemIn(BaseModel):
     product_id: str
     quantity: int = Field(..., gt=0)
     unit_price: Optional[float] = Field(None, ge=0)  # vazio = preço de venda do produto
+    commission_value: Optional[float] = Field(None, ge=0)  # vazio = comissão cadastrada no produto
 
 class SaleCreate(BaseModel):
     customer_name: Optional[str] = ""
@@ -733,11 +738,6 @@ async def load_products(company_id: str, product_ids: List[str]) -> dict:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
     return found
 
-def sale_commission_rule(seller: dict):
-    """Regra de comissão do vendedor; padrão R$ 5,00 por venda"""
-    ctype = seller.get("commission_type") or "fixed"
-    cvalue = seller.get("commission_value")
-    return ctype, float(5.0 if cvalue is None else cvalue)
 
 def product_label(p: dict) -> str:
     return f"{p['name']} - {p['flavor']}" if p.get("flavor") else p["name"]
@@ -847,81 +847,83 @@ async def seed_vapers(user: dict = Depends(get_current_user)):
             "name": name, "brand": brand, "flavor": flavor, "puffs": puffs,
             "sku": f"VP-{i:03d}",
             "cost_price": cost, "sale_price": price, "min_stock": min_stock,
+            "commission_type": "fixed", "commission_value": 5.0,
             "stock": 0, "active": True, "created_at": now_iso(),
         })
     await db.products.insert_many(docs)
     return {"message": f"{len(docs)} vapers cadastrados", "count": len(docs)}
 
+# ==================== TRAVAS: REVISÃO E FECHAMENTO DE CAIXA ====================
+
+def local_today(tz_offset: int = 0) -> str:
+    return (datetime.now(timezone.utc) - timedelta(minutes=tz_offset)).date().isoformat()
+
+def doc_local_date(doc: dict) -> str:
+    """Dia (no fuso de quem lançou) em que a compra/venda aconteceu"""
+    return doc.get("local_date") or to_local(doc["created_at"], doc.get("tz_offset", 0)).date().isoformat()
+
+def br_date(day: str) -> str:
+    return "/".join(reversed(day.split("-")))
+
+async def ensure_cash_open(company_id: str, day: str):
+    if await db.cash_closings.find_one({"company_id": company_id, "date": day}, {"_id": 1}):
+        raise HTTPException(status_code=400,
+                            detail=f"O caixa de {br_date(day)} já foi fechado: não é possível alterar, cancelar ou excluir.")
+
+def ensure_editable(doc: dict, user: dict, kind: str):
+    if doc["status"] != "concluida":
+        raise HTTPException(status_code=400, detail=f"{kind} cancelada não pode ser editada")
+    if doc.get("reviewed"):
+        raise HTTPException(status_code=400, detail=f"{kind} já revisada: não pode mais ser editada")
+    if user.get("role") != "admin" and doc.get("created_by") != user["id"]:
+        raise HTTPException(status_code=403, detail=f"Só quem lançou a {kind.lower()} ou um administrador pode editar")
+
 # ==================== COMPRAS (ENTRADA DE ESTOQUE) ====================
 
 @api_router.get("/purchases")
 async def list_purchases(user: dict = Depends(get_current_user)):
-    return await db.purchases.find({"company_id": user["company_id"]}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    docs = await db.purchases.find({"company_id": user["company_id"]}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return await with_lock_flags(user["company_id"], docs)
 
 @api_router.get("/purchases/{purchase_id}")
 async def get_purchase(purchase_id: str, user: dict = Depends(get_current_user)):
     purchase = await db.purchases.find_one({"id": purchase_id, "company_id": user["company_id"]}, {"_id": 0})
     if not purchase:
         raise HTTPException(status_code=404, detail="Compra não encontrada")
-    return purchase
+    return (await with_lock_flags(user["company_id"], [purchase]))[0]
 
-@api_router.post("/purchases")
-async def create_purchase(data: PurchaseCreate, user: dict = Depends(get_current_user)):
+async def with_lock_flags(company_id: str, docs: list) -> list:
+    """Marca em cada documento se o caixa daquele dia já foi fechado"""
+    closed = {c["date"] for c in await db.cash_closings.find({"company_id": company_id}, {"_id": 0, "date": 1}).to_list(5000)}
+    for d in docs:
+        d["local_date"] = doc_local_date(d)
+        d["cash_closed"] = d["local_date"] in closed
+    return docs
+
+async def build_purchase_lines(company_id: str, data: PurchaseCreate) -> list:
     if not data.items:
         raise HTTPException(status_code=400, detail="Adicione pelo menos um item")
-    products = await load_products(user["company_id"], [i.product_id for i in data.items])
+    products = await load_products(company_id, [i.product_id for i in data.items])
+    return [{
+        "product_id": p["id"], "product_name": product_label(p), "sku": p.get("sku", ""),
+        "quantity": item.quantity, "unit_cost": round(item.unit_cost, 2),
+        "total": round(item.quantity * item.unit_cost, 2),
+    } for item, p in ((i, products[i.product_id]) for i in data.items)]
 
-    purchase_id = str(uuid.uuid4())
-    number = await next_number(user["company_id"], "purchase", "CMP")
-    lines = []
-    for item in data.items:
-        p = products[item.product_id]
-        lines.append({
-            "product_id": p["id"], "product_name": product_label(p), "sku": p.get("sku", ""),
-            "quantity": item.quantity, "unit_cost": round(item.unit_cost, 2),
-            "total": round(item.quantity * item.unit_cost, 2),
-        })
-
-    # Entrada no estoque + custo médio ponderado
-    for item in data.items:
-        p = await db.products.find_one({"id": item.product_id}, {"_id": 0})
+async def apply_purchase_stock(user: dict, lines: list, purchase_id: str, number: str, note: str = ""):
+    """Entrada no estoque + custo médio ponderado"""
+    for line in lines:
+        p = await db.products.find_one({"id": line["product_id"]}, {"_id": 0})
         old_stock, old_cost = max(p.get("stock", 0), 0), p.get("cost_price", 0)
-        new_cost = ((old_stock * old_cost) + (item.quantity * item.unit_cost)) / (old_stock + item.quantity)
+        new_cost = ((old_stock * old_cost) + (line["quantity"] * line["unit_cost"])) / (old_stock + line["quantity"])
         await db.products.update_one(
             {"id": p["id"]},
-            {"$inc": {"stock": item.quantity}, "$set": {"cost_price": round(new_cost, 2)}}
+            {"$inc": {"stock": line["quantity"]}, "$set": {"cost_price": round(new_cost, 2)}}
         )
-        await log_movement(user, p, item.quantity, "entrada", "compra", purchase_id, number)
+        await log_movement(user, p, line["quantity"], "entrada", "compra", purchase_id, number, note)
 
-    doc = {
-        "id": purchase_id,
-        "number": number,
-        "company_id": user["company_id"],
-        "supplier": data.supplier or "",
-        "supplier_doc": data.supplier_doc or "",
-        "items": lines,
-        "total": round(sum(l["total"] for l in lines), 2),
-        "notes": data.notes or "",
-        "status": "concluida",
-        "tz_offset": data.tz_offset,
-        "created_by": user["id"],
-        "created_by_name": user.get("name", ""),
-        "created_at": now_iso(),
-    }
-    await db.purchases.insert_one(doc)
-    doc.pop("_id", None)
-    return doc
-
-@api_router.post("/purchases/{purchase_id}/cancel")
-async def cancel_purchase(purchase_id: str, user: dict = Depends(get_current_user)):
-    require_admin(user)
-    purchase = await db.purchases.find_one({"id": purchase_id, "company_id": user["company_id"]}, {"_id": 0})
-    if not purchase:
-        raise HTTPException(status_code=404, detail="Compra não encontrada")
-    if purchase["status"] == "cancelada":
-        raise HTTPException(status_code=400, detail="Compra já cancelada")
-
-    # Retira do estoque o que entrou; se algo já foi vendido, desfaz e bloqueia
+async def revert_purchase_stock(user: dict, purchase: dict, note: str):
+    """Retira do estoque o que a compra colocou; se algo já foi vendido, desfaz e bloqueia"""
     removed = []
     for line in purchase["items"]:
         res = await db.products.update_one(
@@ -933,70 +935,163 @@ async def cancel_purchase(purchase_id: str, user: dict = Depends(get_current_use
                 await db.products.update_one({"id": done["product_id"]}, {"$inc": {"stock": done["quantity"]}})
             raise HTTPException(
                 status_code=400,
-                detail=f"Não é possível cancelar: estoque de '{line['product_name']}' já foi vendido"
+                detail=f"Não é possível: o estoque de '{line['product_name']}' desta compra já foi vendido"
             )
         removed.append(line)
-
-    await db.purchases.update_one({"id": purchase_id}, {"$set": {"status": "cancelada", "cancelled_at": now_iso()}})
     for line in removed:
         p = {"id": line["product_id"], "name": line["product_name"]}
-        await log_movement(user, p, -line["quantity"], "estorno", "compra", purchase_id, purchase["number"],
-                           "Cancelamento de compra")
+        await log_movement(user, p, -line["quantity"], "estorno", "compra", purchase["id"], purchase["number"], note)
+
+@api_router.post("/purchases")
+async def create_purchase(data: PurchaseCreate, user: dict = Depends(get_current_user)):
+    today = local_today(data.tz_offset)
+    await ensure_cash_open(user["company_id"], today)
+    lines = await build_purchase_lines(user["company_id"], data)
+
+    purchase_id = str(uuid.uuid4())
+    number = await next_number(user["company_id"], "purchase", "CMP")
+    await apply_purchase_stock(user, lines, purchase_id, number)
+
+    doc = {
+        "id": purchase_id,
+        "number": number,
+        "company_id": user["company_id"],
+        "supplier": data.supplier or "",
+        "supplier_doc": data.supplier_doc or "",
+        "items": lines,
+        "total": round(sum(l["total"] for l in lines), 2),
+        "notes": data.notes or "",
+        "status": "concluida",
+        "reviewed": False,
+        "tz_offset": data.tz_offset,
+        "local_date": today,
+        "created_by": user["id"],
+        "created_by_name": user.get("name", ""),
+        "created_at": now_iso(),
+    }
+    await db.purchases.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.put("/purchases/{purchase_id}")
+async def update_purchase(purchase_id: str, data: PurchaseCreate, user: dict = Depends(get_current_user)):
+    purchase = await db.purchases.find_one({"id": purchase_id, "company_id": user["company_id"]}, {"_id": 0})
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Compra não encontrada")
+    ensure_editable(purchase, user, "Compra")
+    await ensure_cash_open(user["company_id"], doc_local_date(purchase))
+    lines = await build_purchase_lines(user["company_id"], data)
+
+    await revert_purchase_stock(user, purchase, "Edição de compra (itens antigos)")
+    await apply_purchase_stock(user, lines, purchase_id, purchase["number"], "Edição de compra")
+    await db.purchases.update_one({"id": purchase_id}, {"$set": {
+        "supplier": data.supplier or "", "supplier_doc": data.supplier_doc or "",
+        "items": lines, "total": round(sum(l["total"] for l in lines), 2), "notes": data.notes or "",
+        "edited_at": now_iso(), "edited_by_name": user.get("name", ""),
+    }})
+    return await get_purchase(purchase_id, user)
+
+@api_router.post("/purchases/{purchase_id}/review")
+async def review_purchase(purchase_id: str, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    result = await db.purchases.update_one(
+        {"id": purchase_id, "company_id": user["company_id"], "status": "concluida", "reviewed": {"$ne": True}},
+        {"$set": {"reviewed": True, "reviewed_at": now_iso(), "reviewed_by_name": user.get("name", "")}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Compra não encontrada, cancelada ou já revisada")
+    return {"message": "Compra revisada — não pode mais ser editada"}
+
+@api_router.post("/purchases/{purchase_id}/cancel")
+async def cancel_purchase(purchase_id: str, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    purchase = await db.purchases.find_one({"id": purchase_id, "company_id": user["company_id"]}, {"_id": 0})
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Compra não encontrada")
+    if purchase["status"] == "cancelada":
+        raise HTTPException(status_code=400, detail="Compra já cancelada")
+    await ensure_cash_open(user["company_id"], doc_local_date(purchase))
+    await revert_purchase_stock(user, purchase, "Cancelamento de compra")
+    await db.purchases.update_one({"id": purchase_id}, {"$set": {"status": "cancelada", "cancelled_at": now_iso()}})
     return {"message": "Compra cancelada e estoque estornado"}
 
 # ==================== VENDAS (BAIXA DE ESTOQUE) ====================
 
 @api_router.get("/sales")
 async def list_sales(user: dict = Depends(get_current_user)):
-    return await db.sales.find({"company_id": user["company_id"]}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    docs = await db.sales.find({"company_id": user["company_id"]}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return await with_lock_flags(user["company_id"], docs)
 
 @api_router.get("/sales/{sale_id}")
 async def get_sale(sale_id: str, user: dict = Depends(get_current_user)):
     sale = await db.sales.find_one({"id": sale_id, "company_id": user["company_id"]}, {"_id": 0})
     if not sale:
         raise HTTPException(status_code=404, detail="Venda não encontrada")
-    return sale
+    return (await with_lock_flags(user["company_id"], [sale]))[0]
 
-@api_router.post("/sales")
-async def create_sale(data: SaleCreate, user: dict = Depends(get_current_user)):
+def product_commission(p: dict):
+    """Comissão cadastrada no produto; padrão R$ 5,00 por unidade"""
+    ctype = p.get("commission_type") or "fixed"
+    cvalue = p.get("commission_value")
+    return ctype, float(5.0 if cvalue is None else cvalue)
+
+async def build_sale(user: dict, data: SaleCreate, default_seller: Optional[dict] = None) -> dict:
+    """Valida a venda e calcula linhas, totais e comissão por item (sem mexer no estoque)"""
     if not data.items:
         raise HTTPException(status_code=400, detail="Adicione pelo menos um item")
     if data.payment_method not in PAYMENT_METHODS:
         raise HTTPException(status_code=400, detail="Forma de pagamento inválida")
-    seller = user
-    if data.seller_id and data.seller_id != user["id"]:
+    seller = default_seller or user
+    if data.seller_id and data.seller_id != seller["id"]:
         require_admin(user)
         seller = await db.users.find_one({"id": data.seller_id, "company_id": user["company_id"]}, {"_id": 0})
         if not seller or not seller.get("active", True):
             raise HTTPException(status_code=404, detail="Vendedor não encontrado ou inativo")
     products = await load_products(user["company_id"], [i.product_id for i in data.items])
 
-    # Quantidade total por produto (o mesmo produto pode aparecer em mais de uma linha)
     needed = {}
-    for item in data.items:
-        needed[item.product_id] = needed.get(item.product_id, 0) + item.quantity
-
     lines = []
     for item in data.items:
         p = products[item.product_id]
         if not p.get("active", True):
             raise HTTPException(status_code=400, detail=f"Produto '{product_label(p)}' está inativo")
+        needed[p["id"]] = needed.get(p["id"], 0) + item.quantity
         price = p.get("sale_price", 0) if item.unit_price is None else item.unit_price
+        ctype, cvalue = product_commission(p)
+        if item.commission_value is not None:
+            cvalue = item.commission_value
+        if ctype == "percent" and cvalue > 100:
+            raise HTTPException(status_code=400, detail="Comissão em porcentagem não pode passar de 100%")
         lines.append({
             "product_id": p["id"], "product_name": product_label(p), "sku": p.get("sku", ""),
             "quantity": item.quantity, "unit_price": round(price, 2),
             "unit_cost": p.get("cost_price", 0),
             "total": round(item.quantity * price, 2),
+            "commission_type": ctype, "commission_rate": cvalue,
         })
     subtotal = round(sum(l["total"] for l in lines), 2)
     if data.discount > subtotal:
         raise HTTPException(status_code=400, detail="Desconto maior que o total da venda")
+    total = round(subtotal - data.discount, 2)
 
-    # Baixa atômica: só desconta se houver saldo; se faltar algo, desfaz o que já baixou
+    # Comissão por item: fixa = valor × quantidade; % = sobre o valor do item já com o desconto rateado
+    factor = (total / subtotal) if subtotal else 0
+    for l in lines:
+        if l["commission_type"] == "fixed":
+            l["commission"] = round(l["commission_rate"] * l["quantity"], 2)
+        else:
+            l["commission"] = round(l["total"] * factor * l["commission_rate"] / 100, 2)
+    commission = round(sum(l["commission"] for l in lines), 2)
+    cost = round(sum(l["quantity"] * l["unit_cost"] for l in lines), 2)
+    return {"seller": seller, "products": products, "needed": needed, "lines": lines,
+            "subtotal": subtotal, "total": total, "cost": cost, "commission": commission}
+
+async def take_stock(company_id: str, needed: dict, products: dict):
+    """Baixa atômica: só desconta se houver saldo; se faltar algo, desfaz o que já baixou"""
     taken = []
     for pid, qty in needed.items():
         res = await db.products.update_one(
-            {"id": pid, "company_id": user["company_id"], "stock": {"$gte": qty}},
+            {"id": pid, "company_id": company_id, "stock": {"$gte": qty}},
             {"$inc": {"stock": -qty}}
         )
         if res.modified_count == 0:
@@ -1010,37 +1105,51 @@ async def create_sale(data: SaleCreate, user: dict = Depends(get_current_user)):
             )
         taken.append((pid, qty))
 
-    sale_id = str(uuid.uuid4())
-    number = await next_number(user["company_id"], "sale", "FAT")
-    for pid, qty in taken:
-        await log_movement(user, products[pid], -qty, "saida", "venda", sale_id, number)
+def sale_needed(sale: dict) -> dict:
+    needed = {}
+    for line in sale["items"]:
+        needed[line["product_id"]] = needed.get(line["product_id"], 0) + line["quantity"]
+    return needed
 
-    total = round(subtotal - data.discount, 2)
-    cost = round(sum(l["quantity"] * l["unit_cost"] for l in lines), 2)
-    ctype, cvalue = sale_commission_rule(seller)
-    commission = round(cvalue if ctype == "fixed" else total * cvalue / 100, 2)
-    doc = {
-        "id": sale_id,
-        "number": number,
-        "company_id": user["company_id"],
+def sale_fields(data: SaleCreate, b: dict) -> dict:
+    return {
         "customer_name": data.customer_name or "",
         "customer_doc": data.customer_doc or "",
         "customer_phone": data.customer_phone or "",
         "payment_method": data.payment_method,
-        "items": lines,
-        "subtotal": subtotal,
+        "items": b["lines"],
+        "subtotal": b["subtotal"],
         "discount": round(data.discount, 2),
-        "total": total,
-        "cost": cost,
-        "profit": round(total - cost - commission, 2),
+        "total": b["total"],
+        "cost": b["cost"],
+        "commission": b["commission"],
+        "profit": round(b["total"] - b["cost"] - b["commission"], 2),
         "notes": data.notes or "",
+        "seller_id": b["seller"]["id"],
+        "seller_name": b["seller"].get("name", ""),
+    }
+
+@api_router.post("/sales")
+async def create_sale(data: SaleCreate, user: dict = Depends(get_current_user)):
+    today = local_today(data.tz_offset)
+    await ensure_cash_open(user["company_id"], today)
+    b = await build_sale(user, data)
+    await take_stock(user["company_id"], b["needed"], b["products"])
+
+    sale_id = str(uuid.uuid4())
+    number = await next_number(user["company_id"], "sale", "FAT")
+    for pid, qty in b["needed"].items():
+        await log_movement(user, b["products"][pid], -qty, "saida", "venda", sale_id, number)
+
+    doc = {
+        "id": sale_id,
+        "number": number,
+        "company_id": user["company_id"],
+        **sale_fields(data, b),
         "status": "concluida",
+        "reviewed": False,
         "tz_offset": data.tz_offset,
-        "seller_id": seller["id"],
-        "seller_name": seller.get("name", ""),
-        "commission_type": ctype,
-        "commission_rate": cvalue,
-        "commission": commission,
+        "local_date": today,
         "created_by": user["id"],
         "created_by_name": user.get("name", ""),
         "created_at": now_iso(),
@@ -1049,9 +1158,57 @@ async def create_sale(data: SaleCreate, user: dict = Depends(get_current_user)):
     doc.pop("_id", None)
     return doc
 
+@api_router.put("/sales/{sale_id}")
+async def update_sale(sale_id: str, data: SaleCreate, user: dict = Depends(get_current_user)):
+    sale = await db.sales.find_one({"id": sale_id, "company_id": user["company_id"]}, {"_id": 0})
+    if not sale:
+        raise HTTPException(status_code=404, detail="Venda não encontrada")
+    ensure_editable(sale, user, "Venda")
+    await ensure_cash_open(user["company_id"], doc_local_date(sale))
+    current_seller = await db.users.find_one({"id": sale.get("seller_id", sale.get("created_by"))}, {"_id": 0}) \
+        or {"id": sale.get("seller_id"), "name": sale.get("seller_name", "")}
+    b = await build_sale(user, data, default_seller=current_seller)
+
+    # Devolve os itens antigos e baixa os novos; se faltar estoque, volta ao estado anterior
+    old_needed = sale_needed(sale)
+    for pid, qty in old_needed.items():
+        await db.products.update_one({"id": pid}, {"$inc": {"stock": qty}})
+    try:
+        await take_stock(user["company_id"], b["needed"], b["products"])
+    except HTTPException:
+        for pid, qty in old_needed.items():
+            await db.products.update_one({"id": pid}, {"$inc": {"stock": -qty}})
+        raise
+    names = {l["product_id"]: l["product_name"] for l in sale["items"]}
+    for pid, qty in old_needed.items():
+        await log_movement(user, {"id": pid, "name": names[pid]}, qty, "estorno", "venda", sale_id,
+                           sale["number"], "Edição de venda (itens antigos)")
+    for pid, qty in b["needed"].items():
+        await log_movement(user, b["products"][pid], -qty, "saida", "venda", sale_id, sale["number"], "Edição de venda")
+
+    await db.sales.update_one({"id": sale_id}, {"$set": {
+        **sale_fields(data, b), "edited_at": now_iso(), "edited_by_name": user.get("name", ""),
+    }})
+    return await get_sale(sale_id, user)
+
+@api_router.post("/sales/{sale_id}/review")
+async def review_sale(sale_id: str, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    result = await db.sales.update_one(
+        {"id": sale_id, "company_id": user["company_id"], "status": "concluida", "reviewed": {"$ne": True}},
+        {"$set": {"reviewed": True, "reviewed_at": now_iso(), "reviewed_by_name": user.get("name", "")}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Venda não encontrada, cancelada ou já revisada")
+    return {"message": "Venda revisada — não pode mais ser editada"}
+
 @api_router.post("/sales/{sale_id}/cancel")
 async def cancel_sale(sale_id: str, user: dict = Depends(get_current_user)):
     require_admin(user)
+    sale = await db.sales.find_one({"id": sale_id, "company_id": user["company_id"]}, {"_id": 0})
+    if not sale:
+        raise HTTPException(status_code=404, detail="Venda não encontrada")
+    await ensure_cash_open(user["company_id"], doc_local_date(sale))
     # Troca o status de forma atômica para nunca estornar duas vezes
     result = await db.sales.update_one(
         {"id": sale_id, "company_id": user["company_id"], "status": "concluida"},
@@ -1059,16 +1216,117 @@ async def cancel_sale(sale_id: str, user: dict = Depends(get_current_user)):
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="Venda não encontrada ou já cancelada")
-    sale = await db.sales.find_one({"id": sale_id}, {"_id": 0})
-    returned = {}
-    for line in sale["items"]:
-        returned[line["product_id"]] = returned.get(line["product_id"], 0) + line["quantity"]
     names = {l["product_id"]: l["product_name"] for l in sale["items"]}
-    for pid, qty in returned.items():
+    for pid, qty in sale_needed(sale).items():
         await db.products.update_one({"id": pid}, {"$inc": {"stock": qty}})
         await log_movement(user, {"id": pid, "name": names[pid]}, qty, "estorno", "venda", sale_id,
                            sale["number"], "Cancelamento de venda")
     return {"message": "Venda cancelada e estoque devolvido"}
+
+# ==================== FECHAMENTO DE CAIXA DO DIA ====================
+
+class CashClose(BaseModel):
+    date: Optional[str] = None            # AAAA-MM-DD (vazio = hoje)
+    counted_cash: Optional[float] = None  # dinheiro contado na gaveta
+    notes: Optional[str] = ""
+    tz_offset: int = 0
+
+def parse_day(day: Optional[str], tz_offset: int = 0) -> str:
+    if not day:
+        return local_today(tz_offset)
+    try:
+        return datetime.strptime(day, "%Y-%m-%d").date().isoformat()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Data inválida (use AAAA-MM-DD)")
+
+async def docs_on_day(collection, company_id: str, day: str) -> list:
+    d = datetime.strptime(day, "%Y-%m-%d")
+    lo = (d - timedelta(days=1)).replace(tzinfo=timezone.utc).isoformat()
+    hi = (d + timedelta(days=2)).replace(tzinfo=timezone.utc).isoformat()
+    docs = await collection.find({"company_id": company_id, "created_at": {"$gte": lo, "$lt": hi}},
+                                 {"_id": 0}).sort("created_at", 1).to_list(20000)
+    return [x for x in docs if doc_local_date(x) == day]
+
+async def compute_cash_day(company_id: str, day: str) -> dict:
+    sales = await docs_on_day(db.sales, company_id, day)
+    purchases = await docs_on_day(db.purchases, company_id, day)
+    done = [s for s in sales if s["status"] == "concluida"]
+    cancelled = [s for s in sales if s["status"] == "cancelada"]
+    by_method = {}
+    for s in done:
+        m = by_method.setdefault(s["payment_method"], {"method": s["payment_method"],
+                                 "label": PAYMENT_METHODS.get(s["payment_method"], s["payment_method"]),
+                                 "count": 0, "total": 0.0})
+        m["count"] += 1
+        m["total"] = round(m["total"] + s["total"], 2)
+    by_seller = {}
+    for s in done:
+        name = s.get("seller_name") or s.get("created_by_name", "")
+        r = by_seller.setdefault(name, {"name": name, "count": 0, "total": 0.0, "commission": 0.0})
+        r["count"] += 1
+        r["total"] = round(r["total"] + s["total"], 2)
+        r["commission"] = round(r["commission"] + s.get("commission", 0), 2)
+    p_done = [p for p in purchases if p["status"] == "concluida"]
+    return {
+        "date": day,
+        "closed": False,
+        "sales_count": len(done),
+        "sales_total": round(sum(s["total"] for s in done), 2),
+        "discounts": round(sum(s.get("discount", 0) for s in done), 2),
+        "commissions": round(sum(s.get("commission", 0) for s in done), 2),
+        "cash_sales": by_method.get("dinheiro", {}).get("total", 0.0),
+        "by_method": sorted(by_method.values(), key=lambda m: m["total"], reverse=True),
+        "by_seller": sorted(by_seller.values(), key=lambda r: r["total"], reverse=True),
+        "cancelled_count": len(cancelled),
+        "cancelled_total": round(sum(s["total"] for s in cancelled), 2),
+        "purchases_count": len(p_done),
+        "purchases_total": round(sum(p["total"] for p in p_done), 2),
+        "unreviewed_sales": sum(1 for s in done if not s.get("reviewed")),
+        "unreviewed_purchases": sum(1 for p in p_done if not p.get("reviewed")),
+    }
+
+@api_router.get("/cash/day")
+async def cash_day(date: Optional[str] = None, tz_offset: int = 0, user: dict = Depends(get_current_user)):
+    day = parse_day(date, tz_offset)
+    closing = await db.cash_closings.find_one({"company_id": user["company_id"], "date": day}, {"_id": 0})
+    if closing:
+        return {**closing["snapshot"], "closed": True, "closed_at": closing["closed_at"],
+                "closed_by_name": closing.get("closed_by_name", ""), "counted_cash": closing.get("counted_cash"),
+                "cash_difference": closing.get("cash_difference"), "notes": closing.get("notes", "")}
+    return await compute_cash_day(user["company_id"], day)
+
+@api_router.get("/cash/closings")
+async def cash_closings(limit: int = 30, user: dict = Depends(get_current_user)):
+    docs = await db.cash_closings.find({"company_id": user["company_id"]}, {"_id": 0}).sort("date", -1).to_list(min(limit, 365))
+    return [{"date": d["date"], "closed_at": d["closed_at"], "closed_by_name": d.get("closed_by_name", ""),
+             "sales_count": d["snapshot"]["sales_count"], "sales_total": d["snapshot"]["sales_total"],
+             "counted_cash": d.get("counted_cash"), "cash_difference": d.get("cash_difference")} for d in docs]
+
+@api_router.post("/cash/close")
+async def close_cash(data: CashClose, user: dict = Depends(get_current_user)):
+    """Fecha o caixa do dia: vendas e compras desse dia ficam travadas"""
+    day = parse_day(data.date, data.tz_offset)
+    if day > local_today(data.tz_offset):
+        raise HTTPException(status_code=400, detail="Não é possível fechar o caixa de um dia futuro")
+    await ensure_cash_open(user["company_id"], day)
+    snapshot = await compute_cash_day(user["company_id"], day)
+    difference = None
+    if data.counted_cash is not None:
+        difference = round(data.counted_cash - snapshot["cash_sales"], 2)
+    await db.cash_closings.insert_one({
+        "id": str(uuid.uuid4()), "company_id": user["company_id"], "date": day, "snapshot": snapshot,
+        "counted_cash": data.counted_cash, "cash_difference": difference, "notes": data.notes or "",
+        "closed_at": now_iso(), "closed_by": user["id"], "closed_by_name": user.get("name", ""),
+    })
+    return {"message": f"Caixa de {br_date(day)} fechado", "cash_difference": difference}
+
+@api_router.delete("/cash/close")
+async def reopen_cash(date: str, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    result = await db.cash_closings.delete_one({"company_id": user["company_id"], "date": parse_day(date)})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="O caixa deste dia não está fechado")
+    return {"message": "Caixa reaberto"}
 
 # ==================== FATURA EM PDF ====================
 
@@ -1370,15 +1628,17 @@ async def commissions_report(start: Optional[str] = None, end: Optional[str] = N
         users = [u for u in users if u["id"] == user["id"]]
     sellers = {}
     for u in users:
-        ctype, cvalue = sale_commission_rule(u)
-        sellers[u["id"]] = {"seller_id": u["id"], "seller_name": u["name"], "commission_type": ctype,
-                            "commission_value": cvalue, "sales_count": 0, "total_sold": 0.0, "commission": 0.0}
+        if u.get("active", True) is False:
+            continue
+        sellers[u["id"]] = {"seller_id": u["id"], "seller_name": u["name"], "job_title": u.get("job_title", ""),
+                            "sales_count": 0, "items_sold": 0, "total_sold": 0.0, "commission": 0.0}
     for s in sales:
         sid = s.get("seller_id", s.get("created_by"))
         row = sellers.setdefault(sid, {"seller_id": sid, "seller_name": s.get("seller_name") or s.get("created_by_name", ""),
-                                       "commission_type": "", "commission_value": 0, "sales_count": 0,
+                                       "job_title": "", "sales_count": 0, "items_sold": 0,
                                        "total_sold": 0.0, "commission": 0.0})
         row["sales_count"] += 1
+        row["items_sold"] += sum(l["quantity"] for l in s["items"])
         row["total_sold"] += s["total"]
         row["commission"] += s.get("commission", 0)
 

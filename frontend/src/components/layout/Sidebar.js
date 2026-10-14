@@ -9,6 +9,7 @@ import {
   BarChart3,
   Users,
   Wallet,
+  Calculator,
   Settings,
   Lock
 } from 'lucide-react';
@@ -34,7 +35,8 @@ const Sidebar = ({ collapsed, mobileOpen, setMobileOpen }) => {
     { path: '/sales',     label: 'Vendas',        icon: ShoppingCart },
     { path: '/purchases', label: 'Compras',       icon: Package },
     { path: '/products',  label: 'Produtos',      icon: Box },
-    { path: '/reports',   label: 'Relatórios',    icon: BarChart3 },
+    { path: '/cash',      label: 'Caixa',         icon: Calculator },
+    { path: '/reports',  label: 'Relatórios',    icon: BarChart3 },
     { path: '/finance',   label: 'Financeiro',    icon: Wallet,    adminOnly: true },
     { path: '/users',     label: 'Funcionários',  icon: Users,     adminOnly: true },
     { path: '/settings',  label: 'Configurações', icon: Settings },
@@ -45,7 +47,7 @@ const Sidebar = ({ collapsed, mobileOpen, setMobileOpen }) => {
     { path: '/',          label: 'Painel',     icon: Home },
     { path: '/sales',     label: 'Vendas',     icon: ShoppingCart },
     { path: '/purchases', label: 'Compras',    icon: Package },
-    { path: '/products',  label: 'Produtos',   icon: Box },
+    { path: '/cash',      label: 'Caixa',      icon: Calculator },
     { path: '/reports',   label: 'Relatórios', icon: BarChart3 },
   ];
 

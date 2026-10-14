@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { toast } from 'sonner';
 import { BarChart3, Wallet } from 'lucide-react';
 import PageHeader from '../components/layout/PageHeader';
-import { apiError, commissionLabel, formatDateTime, lastDays, tzOffset } from '../lib/store';
+import { apiError, formatDateTime, lastDays, tzOffset } from '../lib/store';
 
 import { API_URL as API } from '../config';
 
@@ -219,7 +219,7 @@ const ReportsPage = () => {
                     <table className="data-table">
                       <thead>
                         <tr>
-                          <th>Funcionário</th><th>Regra atual</th><th className="text-right">Vendas</th>
+                          <th>Funcionário</th><th className="text-right">Vendas</th><th className="text-right">Itens</th>
                           <th className="text-right">Total vendido</th><th className="text-right">Comissão</th>
                         </tr>
                       </thead>
@@ -227,10 +227,9 @@ const ReportsPage = () => {
                         {commissions.rows.map((r) => (
                           <tr key={r.seller_id}>
                             <td className="font-medium">{r.seller_name}</td>
-                            <td className="text-sm text-slate-500">
-                              {r.commission_type ? commissionLabel(r.commission_type, r.commission_value, money) : '—'}
-                            </td>
+                            
                             <td className="text-right font-mono">{r.sales_count}</td>
+                            <td className="text-right font-mono">{r.items_sold}</td>
                             <td className="text-right font-mono">{money(r.total_sold)}</td>
                             <td className="text-right font-mono font-semibold">{money(r.commission)}</td>
                           </tr>
