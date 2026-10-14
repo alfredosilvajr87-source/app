@@ -6,7 +6,7 @@
   display: flex;
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 .main-content {
@@ -14,16 +14,21 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  overflow-x: hidden;
+  overflow-x: clip;
   min-width: 0;
   position: relative;
+}
+/* No computador a barra lateral é fixa; o conteúdo começa ao lado dela */
+@media (min-width: 1024px) {
+  .main-content { margin-left: 248px; transition: margin-left 0.25s ease; }
+  .app-container.sidebar-is-collapsed .main-content { margin-left: 72px; }
 }
 
 .page-content {
   flex: 1;
   padding: 1rem;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
   color: hsl(var(--foreground));
   /* espaço para a barra inferior do celular não cobrir o fim da página */
   padding-bottom: calc(84px + env(safe-area-inset-bottom));
@@ -61,8 +66,10 @@
   flex-direction: column;
   transition: width 0.25s ease, left 0.25s ease;
   flex-shrink: 0;
-  position: sticky;
-  top: 0;
+  /* fixa: não acompanha a rolagem da página */
+  position: fixed;
+  left: 0; top: 0; bottom: 0;
+  z-index: 45;
   height: 100vh;
   overflow: hidden;
 }
@@ -188,7 +195,7 @@
 
 /* ── Cabeçalho de página ── */
 .page-title-icon {
-  width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+  width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   background: rgba(139, 92, 246, 0.14); border: 1px solid rgba(139, 92, 246, 0.3); color: #7c3aed;
 }
@@ -197,20 +204,20 @@
 /* ── Botão de destaque (Nova venda) e contorno (Nova compra) ── */
 .btn-brand {
   display: inline-flex; align-items: center; gap: 0.45rem;
-  padding: 0.5rem 1rem; border-radius: 9px; font-weight: 600; font-size: 0.875rem;
+  padding: 0.4rem 0.8rem; border-radius: 8px; font-weight: 600; font-size: 0.8rem;
   color: #fff; background: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%);
   box-shadow: 0 3px 14px rgba(124, 58, 237, 0.35); transition: filter 0.15s;
   white-space: nowrap;
 }
-.btn-brand svg { width: 16px; height: 16px; }
+.btn-brand svg { width: 14px; height: 14px; }
 .btn-brand:hover { filter: brightness(1.1); }
 .btn-ghost-brand {
   display: inline-flex; align-items: center; gap: 0.45rem;
-  padding: 0.5rem 1rem; border-radius: 9px; font-weight: 600; font-size: 0.875rem;
+  padding: 0.4rem 0.8rem; border-radius: 8px; font-weight: 600; font-size: 0.8rem;
   color: var(--text-strong); background: var(--surface); border: 1px solid var(--line);
   transition: border-color 0.15s, background 0.15s; white-space: nowrap;
 }
-.btn-ghost-brand svg { width: 16px; height: 16px; }
+.btn-ghost-brand svg { width: 14px; height: 14px; }
 .btn-ghost-brand:hover { border-color: #8b5cf6; background: rgba(139, 92, 246, 0.08); }
 
 /* ── Barra inferior (somente celular) ── */
@@ -245,8 +252,8 @@
 /* ── Cartões de indicadores (KPI) ── */
 .kpi-card {
   position: relative;
-  border-radius: 14px;
-  padding: 0.9rem 1.05rem;
+  border-radius: 12px;
+  padding: 0.7rem 0.9rem;
   border: 1px solid color-mix(in srgb, var(--kpi-color, #8b5cf6) 55%, transparent);
   background:
     radial-gradient(ellipse 80% 90% at 0% 0%, color-mix(in srgb, var(--kpi-color, #8b5cf6) 12%, transparent), transparent 70%),
@@ -268,22 +275,22 @@
 .kpi-amber  { --kpi-color: #f59e0b; }
 .kpi-rose   { --kpi-color: #f43f5e; }
 .kpi-icon {
-  width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   background: color-mix(in srgb, var(--kpi-color) 18%, transparent);
   color: color-mix(in srgb, var(--kpi-color) 85%, black);
 }
-.kpi-icon svg { width: 18px; height: 18px; }
+.kpi-icon svg { width: 15px; height: 15px; }
 .dark .kpi-icon { color: color-mix(in srgb, var(--kpi-color) 70%, white); }
-.kpi-trend { width: 18px; height: 18px; color: color-mix(in srgb, var(--kpi-color) 80%, black); }
+.kpi-trend { width: 15px; height: 15px; color: color-mix(in srgb, var(--kpi-color) 80%, black); }
 .dark .kpi-trend { color: color-mix(in srgb, var(--kpi-color) 70%, white); }
-.kpi-label { font-size: 0.84rem; font-weight: 500; color: var(--text-2); }
+.kpi-label { font-size: 0.78rem; font-weight: 500; color: var(--text-2); }
 .kpi-value {
   font-family: 'Exo 2', sans-serif; font-weight: 700;
-  font-size: clamp(1.2rem, 1.55vw, 1.55rem); color: var(--text-strong); line-height: 1.15;
+  font-size: clamp(1.05rem, 1.25vw, 1.3rem); color: var(--text-strong); line-height: 1.15;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.kpi-sub { font-size: 0.78rem; color: var(--text-3); }
+.kpi-sub { font-size: 0.72rem; color: var(--text-3); }
 
 /* Card de alerta (borda esquerda vermelha) */
 .alert-card { border-left: 3px solid #f43f5e !important; }
@@ -316,30 +323,57 @@
 .status-critical { color: var(--bad-fg); background: var(--bad-bg); border-color: var(--bad-line); }
 
 /* ── Login (sempre escuro) ── */
-.login-container { min-height: 100vh; display: flex; background: #07070f; }
-.login-image {
-  flex: 1; position: relative; overflow: hidden;
-  display: flex; align-items: center; justify-content: center;
+.login-container { min-height: 100vh; display: flex; background: #07070f; color: #f4f4fb; }
+.login-brand {
+  display: none;
+  flex: 1.1; position: relative; overflow: hidden;
+  flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem;
+  padding: 3rem;
   background:
-    radial-gradient(ellipse 60% 50% at 40% 40%, rgba(139, 92, 246, 0.28), transparent 70%),
-    radial-gradient(ellipse 50% 40% at 70% 60%, rgba(59, 130, 246, 0.2), transparent 70%),
+    radial-gradient(ellipse 60% 50% at 40% 35%, rgba(139, 92, 246, 0.28), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 70% 65%, rgba(59, 130, 246, 0.18), transparent 70%),
     #05050b;
 }
-.login-image img { width: min(520px, 85%); height: auto; mix-blend-mode: screen; }
+@media (min-width: 1024px) { .login-brand { display: flex; } }
+.login-brand-logo { width: min(340px, 70%); height: auto; mix-blend-mode: screen; }
+.login-brand-text { max-width: 400px; width: 100%; }
+.login-brand-text h1 { font-size: 1.6rem; font-weight: 700; color: #fff; line-height: 1.2; }
+.login-brand-text p { color: #a1a1bb; margin-top: 0.4rem; font-size: 0.95rem; }
+.login-brand-text ul { margin-top: 1.4rem; display: grid; gap: 0.7rem; }
+.login-brand-text li { display: flex; align-items: center; gap: 0.7rem; color: #d4d4e4; font-size: 0.9rem; }
+.login-brand-text li span {
+  width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(139, 92, 246, 0.16); border: 1px solid rgba(139, 92, 246, 0.3); color: #c4b5fd;
+}
 .login-form {
   flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem;
-  background: #0a0a13;
-  border-left: 1px solid #1a1a2c;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 1.5rem 1rem;
+  background:
+    radial-gradient(ellipse 80% 40% at 50% 0%, rgba(139, 92, 246, 0.14), transparent 70%),
+    #0a0a13;
 }
-
+@media (min-width: 1024px) { .login-form { border-left: 1px solid #1a1a2c; padding: 2rem; } }
+.login-card {
+  width: 100%; max-width: 400px;
+  background: rgba(14, 14, 26, 0.85);
+  border: 1px solid #23233a; border-radius: 18px;
+  padding: 1.75rem 1.5rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+@media (min-width: 640px) { .login-card { padding: 2.25rem 2rem; } }
+.login-mobile-brand { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1.75rem; }
+.login-mobile-brand img { width: 44px; height: 44px; border-radius: 12px; mix-blend-mode: screen; }
+.login-mobile-brand .brand-name { display: block; font-family: 'Exo 2', sans-serif; font-weight: 800; font-size: 1.2rem; color: #fff; letter-spacing: 0.02em; }
+.login-mobile-brand .brand-tagline { display: block; font-size: 0.52rem; letter-spacing: 0.14em; color: #a1a1bb; margin-top: 3px; }
+@media (min-width: 1024px) { .login-mobile-brand { display: none; } }
+.login-footer { margin-top: 1.5rem; font-size: 0.72rem; color: #5c5c75; text-align: center; }
 /* Logo tem fundo preto: 'screen' deixa o preto transparente sobre fundo escuro */
 .logo-blend { mix-blend-mode: screen; }
 :root:not(.dark) .logo-blend { mix-blend-mode: normal; border-radius: 24px; }
-.login-container .logo-blend { mix-blend-mode: screen; border-radius: 0; }
+
 
 /* ── Barra lateral no celular ── */
 @media (max-width: 1023px) {

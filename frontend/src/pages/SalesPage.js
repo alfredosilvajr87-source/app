@@ -236,7 +236,7 @@ const SalesPage = () => {
                 <tbody>
                   {visible.map((s) => (
                     <tr key={s.id} className={s.status === 'cancelada' ? 'opacity-50' : ''}>
-                      <td className="font-mono font-medium">{s.number}</td>
+                      <td className="font-mono font-medium whitespace-nowrap">{s.number}</td>
                       <td className="text-sm whitespace-nowrap">{formatDateTime(s.created_at)}</td>
                       <td>{s.customer_name || 'Consumidor final'}</td>
                       <td className="text-sm">{s.seller_name || s.created_by_name}</td>

@@ -1658,7 +1658,7 @@ async def commissions_report(start: Optional[str] = None, end: Optional[str] = N
 # ==================== FINANCEIRO: DESPESAS E FECHAMENTO DO MÊS ====================
 
 EXPENSE_CATEGORIES = [
-    "Aluguel", "Energia", "Água", "Internet/Telefone", "Impostos", "Contador",
+    "Aluguel", "Energia", "Água", "Gás", "Internet/Telefone", "Impostos", "Contador",
     "Marketing", "Manutenção", "Embalagens/Material", "Taxas de cartão", "Transporte", "Outros",
 ]
 

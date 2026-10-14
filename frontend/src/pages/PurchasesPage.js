@@ -15,13 +15,21 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../components/ui/alert-dialog';
-import { Truck, Plus, Eye, XCircle, Package, Pencil, BadgeCheck } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Truck, Plus, Eye, XCircle, Package, Pencil, BadgeCheck, Receipt, Boxes } from 'lucide-react';
+import { SELECT_CLASS } from '../components/store/ItemLines';
 import DocStatus, { canEdit } from '../components/store/DocStatus';
 import PageHeader from '../components/layout/PageHeader';
 import ItemLines, { emptyLine, linesTotal } from '../components/store/ItemLines';
 import { apiError, formatDateTime, tzOffset } from '../lib/store';
 
 import { API_URL as API } from '../config';
+
+const localToday = () => {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+};
+const emptyExpense = () => ({ description: '', category: 'Energia', amount: '', date: localToday(), notes: '' });
 
 const PurchasesPage = () => {
   const { user, isAdmin } = useAuth();
@@ -39,21 +47,32 @@ const PurchasesPage = () => {
   const [reviewing, setReviewing] = useState(null);
 
   const [todayClosed, setTodayClosed] = useState(false);
+  // Tipo do lançamento: mercadoria (entra no estoque) ou despesa (só admin; vai para o Financeiro)
+  const [kind, setKind] = useState('mercadoria');
+  const [tab, setTab] = useState('mercadoria');
+  const [expense, setExpense] = useState(emptyExpense());
+  const [expenses, setExpenses] = useState([]);
+  const [categories, setCategories] = useState([]);
 
   useEffect(() => {
     fetchData();
     axios.get(`${API}/cash/day`, { params: { tz_offset: tzOffset() } })
       .then((r) => setTodayClosed(r.data.closed)).catch(() => {});
-  }, []);
+    if (isAdmin) {
+      axios.get(`${API}/finance/categories`).then((r) => setCategories(r.data)).catch(() => {});
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchData = async () => {
     try {
-      const [pRes, prodRes] = await Promise.all([
+      const [pRes, prodRes, eRes] = await Promise.all([
         axios.get(`${API}/purchases`),
         axios.get(`${API}/products`, { params: { include_inactive: false } }),
+        isAdmin ? axios.get(`${API}/expenses`, { params: { tz_offset: tzOffset() } }) : null,
       ]);
       setPurchases(pRes.data);
       setProducts(prodRes.data);
+      if (eRes) setExpenses(eRes.data);
     } catch (err) {
       toast.error(apiError(err, 'Falha ao carregar compras'));
     } finally {
@@ -63,9 +82,18 @@ const PurchasesPage = () => {
 
   const openNew = () => {
     setEditing(null);
+    setKind(todayClosed || products.length === 0 ? (isAdmin ? 'despesa' : 'mercadoria') : 'mercadoria');
     setHeader({ supplier: '', supplier_doc: '', notes: '' });
     setLines([emptyLine()]);
+    setExpense(emptyExpense());
     setFormOpen(true);
+  };
+
+  const saveExpense = async () => {
+    const res = await axios.post(`${API}/expenses`, {
+      ...expense, amount: parseFloat(expense.amount) || 0,
+    });
+    toast.success(`Despesa "${res.data.description}" lançada no Financeiro`);
   };
 
   const openEdit = (p) => {
@@ -79,6 +107,18 @@ const PurchasesPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
+    if (!editing && kind === 'despesa') {
+      try {
+        await saveExpense();
+        setFormOpen(false);
+        fetchData();
+      } catch (err) {
+        toast.error(apiError(err, 'Falha ao lançar a despesa'));
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     const payload = {
       ...header,
       tz_offset: tzOffset(),
@@ -131,18 +171,65 @@ const PurchasesPage = () => {
 
   return (
     <div className="space-y-6" data-testid="purchases-page">
-      <PageHeader icon={Package} title="Compras" subtitle="Entrada de mercadoria — cada compra soma ao estoque">
-        <Button onClick={openNew} disabled={todayClosed || products.length === 0} data-testid="new-purchase-btn">
+      <PageHeader icon={Package} title="Compras"
+        subtitle={isAdmin ? 'Mercadorias entram no estoque; despesas vão para o Financeiro' : 'Entrada de mercadoria — cada compra soma ao estoque'}>
+        <Button onClick={openNew} disabled={!isAdmin && (todayClosed || products.length === 0)} data-testid="new-purchase-btn">
           <Plus className="h-4 w-4 mr-2" /> Nova compra
         </Button>
       </PageHeader>
 
       {todayClosed && (
         <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-          O caixa de hoje já foi fechado. Novas compras só depois que um administrador reabrir o caixa.
+          O caixa de hoje já foi fechado. Novas compras de mercadoria só depois que um administrador reabrir o caixa.
+          {isAdmin && ' Despesas continuam podendo ser lançadas.'}
         </p>
       )}
 
+      {isAdmin && (
+        <div className="flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 w-fit text-sm">
+          {[['mercadoria', `Mercadorias (${purchases.length})`], ['despesa', `Despesas do mês (${expenses.length})`]].map(([key, label]) => (
+            <button key={key} type="button" onClick={() => setTab(key)}
+              className={`px-3 py-1.5 rounded-md font-medium transition ${tab === key ? 'bg-primary text-white' : 'text-slate-500 hover:text-slate-900'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {isAdmin && tab === 'despesa' && (
+        <Card>
+          <CardContent className="p-0">
+            {expenses.length === 0 ? (
+              <div className="py-14 text-center">
+                <Receipt className="h-10 w-10 mx-auto text-slate-300 mb-3" />
+                <p className="text-slate-500">Nenhuma despesa lançada neste mês</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="data-table">
+                  <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th className="text-right">Valor</th></tr></thead>
+                  <tbody>
+                    {expenses.map((x) => (
+                      <tr key={x.id}>
+                        <td className="text-sm whitespace-nowrap">{x.date.split('-').reverse().join('/')}</td>
+                        <td>{x.description}{x.notes && <span className="block text-xs text-slate-500">{x.notes}</span>}</td>
+                        <td className="text-sm text-slate-500">{x.category}</td>
+                        <td className="text-right font-mono">{money(x.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="text-xs text-slate-500 p-4">
+              Despesas não mexem no estoque nem contam como venda: entram no resultado do mês. Para editar ou excluir,
+              use <Link to="/finance" className="text-violet-500 underline">Financeiro → Despesas do mês</Link>.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {(!isAdmin || tab === 'mercadoria') && (
       <Card>
         <CardContent className="p-0">
           {loading ? (
@@ -168,7 +255,7 @@ const PurchasesPage = () => {
                 <tbody>
                   {purchases.map((p) => (
                     <tr key={p.id} className={p.status === 'cancelada' ? 'opacity-50' : ''}>
-                      <td className="font-mono font-medium">{p.number}</td>
+                      <td className="font-mono font-medium whitespace-nowrap">{p.number}</td>
                       <td className="text-sm whitespace-nowrap">{formatDateTime(p.created_at)}</td>
                       <td>{p.supplier || '—'}</td>
                       <td className="text-right font-mono">{p.items.reduce((s, i) => s + i.quantity, 0)}</td>
@@ -197,6 +284,7 @@ const PurchasesPage = () => {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Nova compra */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
@@ -206,9 +294,72 @@ const PurchasesPage = () => {
             <DialogDescription>
               {editing
                 ? 'O estoque é ajustado pela diferença. Não é possível reduzir itens que já foram vendidos. Depois de revisada, a compra não pode mais ser editada.'
-                : 'Os itens entram no estoque ao salvar. O custo do produto é atualizado pelo custo médio.'}
+                : kind === 'despesa'
+                  ? 'Gasto da loja (energia, internet, gás, aluguel…). Não entra no estoque nem conta como venda: vai direto para o resultado do mês no Financeiro.'
+                  : 'Os itens entram no estoque ao salvar. O custo do produto é atualizado pelo custo médio.'}
             </DialogDescription>
           </DialogHeader>
+
+          {!editing && isAdmin && (
+            <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 text-sm">
+              <button type="button" onClick={() => setKind('mercadoria')}
+                disabled={todayClosed || products.length === 0}
+                className={`flex items-center justify-center gap-2 py-2 rounded-md font-medium transition disabled:opacity-40 ${
+                  kind === 'mercadoria' ? 'bg-primary text-white' : 'text-slate-500 hover:text-slate-900'}`}>
+                <Boxes className="h-4 w-4" /> Mercadoria (estoque)
+              </button>
+              <button type="button" onClick={() => setKind('despesa')}
+                className={`flex items-center justify-center gap-2 py-2 rounded-md font-medium transition ${
+                  kind === 'despesa' ? 'bg-primary text-white' : 'text-slate-500 hover:text-slate-900'}`}>
+                <Receipt className="h-4 w-4" /> Despesa
+              </button>
+            </div>
+          )}
+
+          {!editing && kind === 'despesa' ? (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-1">
+                <Label>Descrição *</Label>
+                <Input required value={expense.description} placeholder="Ex.: Conta de energia de outubro"
+                  onChange={(e) => setExpense({ ...expense, description: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <Label>Categoria</Label>
+                  <select className={SELECT_CLASS} value={expense.category}
+                    onChange={(e) => setExpense({ ...expense, category: e.target.value })}>
+                    {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Valor *</Label>
+                  <Input type="number" min="0.01" step="0.01" required value={expense.amount}
+                    onChange={(e) => setExpense({ ...expense, amount: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label>Data *</Label>
+                  <Input type="date" required value={expense.date}
+                    onChange={(e) => setExpense({ ...expense, date: e.target.value })} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Observação</Label>
+                <Input value={expense.notes} onChange={(e) => setExpense({ ...expense, notes: e.target.value })} />
+              </div>
+              <div className="flex justify-between items-center border-t pt-3">
+                <span className="text-slate-500">Valor da despesa</span>
+                <span className="font-heading text-xl font-bold">{money(parseFloat(expense.amount) || 0)}</span>
+              </div>
+              <p className="text-xs text-slate-500">
+                Contas que se repetem todo mês (aluguel, internet…) podem ser cadastradas uma vez em
+                Financeiro → Despesas fixas.
+              </p>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Cancelar</Button>
+                <Button type="submit" disabled={saving}>{saving ? 'Salvando…' : 'Lançar despesa'}</Button>
+              </DialogFooter>
+            </form>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -242,6 +393,7 @@ const PurchasesPage = () => {
               <Button type="submit" disabled={saving}>{saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Registrar compra'}</Button>
             </DialogFooter>
           </form>
+          )}
         </DialogContent>
       </Dialog>
 

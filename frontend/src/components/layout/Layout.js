@@ -14,7 +14,7 @@ const Layout = () => {
   };
 
   return (
-    <div className="app-container">
+    <div className={`app-container${sidebarCollapsed ? ' sidebar-is-collapsed' : ''}`}>
       <Sidebar collapsed={sidebarCollapsed} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
       <main className="main-content">
         <Header onMenuClick={toggleMenu} />
