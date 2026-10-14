@@ -16,7 +16,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../components/ui/alert-dialog';
 import { Link } from 'react-router-dom';
-import { Truck, Plus, Eye, XCircle, Package, Pencil, BadgeCheck, Receipt, Boxes } from 'lucide-react';
+import { Truck, Plus, Eye, XCircle, Package, Pencil, BadgeCheck, Receipt, Boxes, Trash2 } from 'lucide-react';
 import { SELECT_CLASS } from '../components/store/ItemLines';
 import DocStatus, { canEdit } from '../components/store/DocStatus';
 import PageHeader from '../components/layout/PageHeader';
@@ -50,6 +50,7 @@ const PurchasesPage = () => {
   // Tipo do lançamento: mercadoria (entra no estoque) ou despesa (só admin; vai para o Financeiro)
   const [kind, setKind] = useState('mercadoria');
   const [tab, setTab] = useState('mercadoria');
+  const [deletingExpense, setDeletingExpense] = useState(null);
   const [expense, setExpense] = useState(emptyExpense());
   const [expenses, setExpenses] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -90,10 +91,35 @@ const PurchasesPage = () => {
   };
 
   const saveExpense = async () => {
-    const res = await axios.post(`${API}/expenses`, {
-      ...expense, amount: parseFloat(expense.amount) || 0,
-    });
-    toast.success(`Despesa "${res.data.description}" lançada no Financeiro`);
+    const payload = {
+      description: expense.description, category: expense.category, date: expense.date,
+      notes: expense.notes || '', amount: parseFloat(expense.amount) || 0,
+    };
+    if (expense.id) {
+      await axios.put(`${API}/expenses/${expense.id}`, payload);
+      toast.success('Despesa atualizada');
+    } else {
+      const res = await axios.post(`${API}/expenses`, payload);
+      toast.success(`Despesa "${res.data.description}" lançada no Financeiro`);
+    }
+  };
+
+  const openEditExpense = (x) => {
+    setEditing(null);
+    setKind('despesa');
+    setExpense({ ...x, amount: String(x.amount), notes: x.notes || '' });
+    setFormOpen(true);
+  };
+
+  const handleDeleteExpense = async () => {
+    try {
+      await axios.delete(`${API}/expenses/${deletingExpense.id}`);
+      toast.success('Despesa excluída');
+      setDeletingExpense(null);
+      fetchData();
+    } catch (err) {
+      toast.error(apiError(err, 'Falha ao excluir a despesa'));
+    }
   };
 
   const openEdit = (p) => {
@@ -207,7 +233,7 @@ const PurchasesPage = () => {
             ) : (
               <div className="overflow-x-auto">
                 <table className="data-table">
-                  <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th className="text-right">Valor</th></tr></thead>
+                  <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th className="text-right">Valor</th><th className="text-right">Ações</th></tr></thead>
                   <tbody>
                     {expenses.map((x) => (
                       <tr key={x.id}>
@@ -215,6 +241,14 @@ const PurchasesPage = () => {
                         <td>{x.description}{x.notes && <span className="block text-xs text-slate-500">{x.notes}</span>}</td>
                         <td className="text-sm text-slate-500">{x.category}</td>
                         <td className="text-right font-mono">{money(x.amount)}</td>
+                        <td className="text-right whitespace-nowrap">
+                          <Button variant="ghost" size="icon" title="Editar despesa" onClick={() => openEditExpense(x)}>
+                            <Pencil className="h-4 w-4 text-slate-400" />
+                          </Button>
+                          <Button variant="ghost" size="icon" title="Excluir despesa" onClick={() => setDeletingExpense(x)}>
+                            <Trash2 className="h-4 w-4 text-slate-400" />
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -222,8 +256,8 @@ const PurchasesPage = () => {
               </div>
             )}
             <p className="text-xs text-slate-500 p-4">
-              Despesas não mexem no estoque nem contam como venda: entram no resultado do mês. Para editar ou excluir,
-              use <Link to="/finance" className="text-violet-500 underline">Financeiro → Despesas do mês</Link>.
+              Despesas não mexem no estoque nem contam como venda: entram no resultado do mês. Também aparecem em{' '}
+              <Link to="/finance" className="text-violet-500 underline">Financeiro → Despesas do mês</Link>.
             </p>
           </CardContent>
         </Card>
@@ -290,7 +324,9 @@ const PurchasesPage = () => {
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="font-heading">{editing ? `Editar compra ${editing.number}` : 'Nova compra'}</DialogTitle>
+            <DialogTitle className="font-heading">
+              {editing ? `Editar compra ${editing.number}` : expense.id && kind === 'despesa' ? 'Editar despesa' : 'Nova compra'}
+            </DialogTitle>
             <DialogDescription>
               {editing
                 ? 'O estoque é ajustado pela diferença. Não é possível reduzir itens que já foram vendidos. Depois de revisada, a compra não pode mais ser editada.'
@@ -300,7 +336,7 @@ const PurchasesPage = () => {
             </DialogDescription>
           </DialogHeader>
 
-          {!editing && isAdmin && (
+          {!editing && isAdmin && !expense.id && (
             <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 text-sm">
               <button type="button" onClick={() => setKind('mercadoria')}
                 disabled={todayClosed || products.length === 0}
@@ -356,7 +392,7 @@ const PurchasesPage = () => {
               </p>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Cancelar</Button>
-                <Button type="submit" disabled={saving}>{saving ? 'Salvando…' : 'Lançar despesa'}</Button>
+                <Button type="submit" disabled={saving}>{saving ? 'Salvando…' : expense.id ? 'Salvar alterações' : 'Lançar despesa'}</Button>
               </DialogFooter>
             </form>
           ) : (
@@ -450,6 +486,22 @@ const PurchasesPage = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deletingExpense} onOpenChange={(o) => !o && setDeletingExpense(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir despesa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{deletingExpense?.description}" — {deletingExpense && money(deletingExpense.amount)}. Ela sai do
+              resultado do mês no Financeiro. Despesas de um mês já fechado não podem ser excluídas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteExpense} className="bg-red-600 hover:bg-red-700">Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!reviewing} onOpenChange={(o) => !o && setReviewing(null)}>
         <AlertDialogContent>
