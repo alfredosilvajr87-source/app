@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import {
-  Package, Receipt, Truck, TrendingUp, Wallet, AlertTriangle, FileText, Sparkles,
+  Package, Receipt, Truck, TrendingUp, Wallet, AlertTriangle, FileText, Sparkles, Boxes,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { apiError, formatDateTime, openInvoice, tzOffset } from '../lib/store';
@@ -121,7 +121,7 @@ const Dashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2 self-start">
           <CardHeader><CardTitle className="font-heading text-lg">Vendas dos últimos 7 dias</CardTitle></CardHeader>
           <CardContent>
             <div className="h-64">
@@ -135,6 +135,29 @@ const Dashboard = () => {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+          </CardContent>
+        </Card>
+
+        <div className="space-y-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="font-heading text-lg flex items-center gap-2">
+              <Boxes className="h-4 w-4 text-blue-600" /> Estoque atual
+            </CardTitle>
+            <span className="text-sm text-slate-500">{data.units_in_stock} un.</span>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2 max-h-64 overflow-y-auto">
+              {data.stock_items.map((p) => (
+                <li key={p.id} className="flex justify-between items-center text-sm gap-2">
+                  <span className="truncate">{p.name}</span>
+                  <span className={`font-mono font-semibold whitespace-nowrap ${
+                    p.stock <= 0 ? 'text-rose-600' : p.stock <= p.min_stock ? 'text-amber-600' : 'text-slate-900'}`}>
+                    {p.stock} un.
+                  </span>
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
 
@@ -162,6 +185,7 @@ const Dashboard = () => {
             )}
           </CardContent>
         </Card>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

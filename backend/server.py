@@ -6,11 +6,12 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument
 import os
+import math
 import logging
 import asyncio
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional
+from typing import List, Optional, Literal
 import uuid
 from datetime import datetime, timezone, timedelta
 from jose import jwt, JWTError
@@ -81,6 +82,8 @@ class AdminUserCreate(BaseModel):
     name: str
     role: str = "user"  # admin, user
     unit_ids: List[str] = []
+    commission_type: Literal["fixed", "percent"] = "fixed"   # fixed = valor por venda
+    commission_value: float = Field(5.0, ge=0)
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -94,6 +97,8 @@ class UserResponse(BaseModel):
     company_name: Optional[str] = ""
     role: str
     unit_ids: List[str] = []
+    commission_type: str = "fixed"
+    commission_value: float = 5.0
     created_at: str
 
 class PasswordChange(BaseModel):
@@ -103,8 +108,9 @@ class PasswordChange(BaseModel):
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     role: Optional[str] = None
-    company_id: Optional[str] = None
     unit_ids: Optional[List[str]] = None
+    commission_type: Optional[Literal["fixed", "percent"]] = None
+    commission_value: Optional[float] = Field(None, ge=0)
 
 # Unit
 class UnitCreate(BaseModel):
@@ -155,6 +161,10 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 def require_admin(user: dict):
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
+
+def check_commission(ctype: str, value: float):
+    if ctype == "percent" and value > 100:
+        raise HTTPException(status_code=400, detail="Comissão em porcentagem não pode passar de 100%")
 
 # ==================== COMPANY ROUTES ====================
 
@@ -462,7 +472,8 @@ async def create_user(new_user: AdminUserCreate, user: dict = Depends(get_curren
     existing = await db.users.find_one({"email": new_user.email}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
-    
+    check_commission(new_user.commission_type, new_user.commission_value)
+
     user_doc = {
         "id": str(uuid.uuid4()),
         "email": new_user.email,
@@ -471,6 +482,8 @@ async def create_user(new_user: AdminUserCreate, user: dict = Depends(get_curren
         "company_id": user["company_id"],  # Same company as admin
         "role": new_user.role,
         "unit_ids": new_user.unit_ids if hasattr(new_user, 'unit_ids') else [],
+        "commission_type": new_user.commission_type,
+        "commission_value": new_user.commission_value,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.users.insert_one(user_doc)
@@ -492,8 +505,13 @@ async def update_user(user_id: str, update: UserUpdate, user: dict = Depends(get
             update_data[k] = v
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
-    
-    result = await db.users.update_one({"id": user_id}, {"$set": update_data})
+    if "commission_type" in update_data or "commission_value" in update_data:
+        current = await db.users.find_one({"id": user_id, "company_id": user["company_id"]}, {"_id": 0}) or {}
+        check_commission(update_data.get("commission_type", current.get("commission_type", "fixed")),
+                         update_data.get("commission_value", current.get("commission_value", 5.0)))
+
+    # Admin só altera usuários da própria empresa
+    result = await db.users.update_one({"id": user_id, "company_id": user["company_id"]}, {"$set": update_data})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -616,6 +634,7 @@ class SaleCreate(BaseModel):
     discount: float = Field(0, ge=0)
     items: List[SaleItemIn]
     notes: Optional[str] = ""
+    seller_id: Optional[str] = None    # admin pode lançar a venda em nome de um funcionário
     tz_offset: int = 0
 
 class StoreSettings(BaseModel):
@@ -701,6 +720,12 @@ async def load_products(company_id: str, product_ids: List[str]) -> dict:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
     return found
 
+def sale_commission_rule(seller: dict):
+    """Regra de comissão do vendedor; padrão R$ 5,00 por venda"""
+    ctype = seller.get("commission_type") or "fixed"
+    cvalue = seller.get("commission_value")
+    return ctype, float(5.0 if cvalue is None else cvalue)
+
 def product_label(p: dict) -> str:
     return f"{p['name']} - {p['flavor']}" if p.get("flavor") else p["name"]
 
@@ -771,17 +796,30 @@ async def adjust_stock(product_id: str, data: StockAdjust, user: dict = Depends(
 
 SAMPLE_VAPERS = [
     # nome, marca, sabor, puffs, custo, venda, estoque mínimo
-    ("Ignite V80", "Ignite", "Menta Gelada", 8000, 45.00, 89.90, 5),
-    ("Ignite V150", "Ignite", "Uva Gelada", 15000, 65.00, 129.90, 5),
-    ("Elf Bar BC10000", "Elf Bar", "Melancia", 10000, 50.00, 99.90, 5),
-    ("Elf Bar TE6000", "Elf Bar", "Morango com Kiwi", 6000, 38.00, 74.90, 5),
-    ("Lost Mary MO5000", "Lost Mary", "Blue Razz", 5000, 35.00, 69.90, 5),
-    ("Oxbar Magic Maze", "Oxbar", "Pêssego Gelado", 10000, 48.00, 94.90, 4),
-    ("Waka soPro", "Waka", "Manga", 10000, 47.00, 92.90, 4),
-    ("Geek Bar Pulse", "Geek Bar", "Frutas Vermelhas", 15000, 62.00, 124.90, 4),
-    ("Life Pod Eco", "Life Pod", "Banana Ice", 10000, 44.00, 87.90, 4),
-    ("Vaporesso XROS 4", "Vaporesso", "", 0, 120.00, 219.90, 2),
+    ("Ignite V80", "Ignite", "Menta Gelada", 8000, 45.00, 130.00, 5),
+    ("Ignite V150", "Ignite", "Uva Gelada", 15000, 65.00, 130.00, 5),
+    ("Elf Bar BC10000", "Elf Bar", "Melancia", 10000, 50.00, 130.00, 5),
+    ("Elf Bar TE6000", "Elf Bar", "Morango com Kiwi", 6000, 38.00, 130.00, 5),
+    ("Lost Mary MO5000", "Lost Mary", "Blue Razz", 5000, 35.00, 130.00, 5),
+    ("Oxbar Magic Maze", "Oxbar", "Pêssego Gelado", 10000, 48.00, 130.00, 4),
+    ("Waka soPro", "Waka", "Manga", 10000, 47.00, 130.00, 4),
+    ("Geek Bar Pulse", "Geek Bar", "Frutas Vermelhas", 15000, 62.00, 130.00, 4),
+    ("Life Pod Eco", "Life Pod", "Banana Ice", 10000, 44.00, 130.00, 4),
+    ("Vaporesso XROS 4", "Vaporesso", "", 0, 120.00, 130.00, 2),
 ]
+
+class BulkPrice(BaseModel):
+    sale_price: float = Field(..., ge=0)
+
+@api_router.post("/products/bulk-price")
+async def bulk_price(data: BulkPrice, user: dict = Depends(get_current_user)):
+    """Define o mesmo preço de venda para todos os produtos ativos"""
+    require_admin(user)
+    result = await db.products.update_many(
+        {"company_id": user["company_id"], "active": True},
+        {"$set": {"sale_price": round(data.sale_price, 2)}}
+    )
+    return {"message": f"Preço atualizado em {result.modified_count} produto(s)", "count": result.modified_count}
 
 @api_router.post("/products/seed-vapers")
 async def seed_vapers(user: dict = Depends(get_current_user)):
@@ -912,6 +950,12 @@ async def create_sale(data: SaleCreate, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Adicione pelo menos um item")
     if data.payment_method not in PAYMENT_METHODS:
         raise HTTPException(status_code=400, detail="Forma de pagamento inválida")
+    seller = user
+    if data.seller_id and data.seller_id != user["id"]:
+        require_admin(user)
+        seller = await db.users.find_one({"id": data.seller_id, "company_id": user["company_id"]}, {"_id": 0})
+        if not seller:
+            raise HTTPException(status_code=404, detail="Vendedor não encontrado")
     products = await load_products(user["company_id"], [i.product_id for i in data.items])
 
     # Quantidade total por produto (o mesmo produto pode aparecer em mais de uma linha)
@@ -960,6 +1004,8 @@ async def create_sale(data: SaleCreate, user: dict = Depends(get_current_user)):
 
     total = round(subtotal - data.discount, 2)
     cost = round(sum(l["quantity"] * l["unit_cost"] for l in lines), 2)
+    ctype, cvalue = sale_commission_rule(seller)
+    commission = round(cvalue if ctype == "fixed" else total * cvalue / 100, 2)
     doc = {
         "id": sale_id,
         "number": number,
@@ -973,10 +1019,15 @@ async def create_sale(data: SaleCreate, user: dict = Depends(get_current_user)):
         "discount": round(data.discount, 2),
         "total": total,
         "cost": cost,
-        "profit": round(total - cost, 2),
+        "profit": round(total - cost - commission, 2),
         "notes": data.notes or "",
         "status": "concluida",
         "tz_offset": data.tz_offset,
+        "seller_id": seller["id"],
+        "seller_name": seller.get("name", ""),
+        "commission_type": ctype,
+        "commission_rate": cvalue,
+        "commission": commission,
         "created_by": user["id"],
         "created_by_name": user.get("name", ""),
         "created_at": now_iso(),
@@ -1196,7 +1247,134 @@ async def dashboard(tz_offset: int = 0, user: dict = Depends(get_current_user)):
         "top_products": sorted(top.values(), key=lambda t: t["quantity"], reverse=True)[:5],
         "low_stock": [{"id": p["id"], "name": product_label(p), "stock": p.get("stock", 0),
                        "min_stock": p.get("min_stock", 0)} for p in low_stock],
+        "stock_items": [{"id": p["id"], "name": product_label(p), "stock": p.get("stock", 0),
+                         "min_stock": p.get("min_stock", 0)} for p in sorted(products, key=product_label)],
         "recent_sales": recent,
+    }
+
+# ==================== RELATÓRIOS: CURVA ABC E COMISSÕES ====================
+
+def parse_period(start: Optional[str], end: Optional[str], tz_offset: int):
+    today = (datetime.now(timezone.utc) - timedelta(minutes=tz_offset)).date()
+    try:
+        d_end = datetime.fromisoformat(end).date() if end else today
+        d_start = datetime.fromisoformat(start).date() if start else d_end - timedelta(days=29)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Data inválida (use AAAA-MM-DD)")
+    if d_start > d_end:
+        raise HTTPException(status_code=400, detail="A data inicial é maior que a final")
+    return d_start, d_end
+
+async def sales_in_period(company_id: str, d_start, d_end, tz_offset: int, extra: Optional[dict] = None) -> list:
+    # Margem de 1 dia no filtro do banco; o corte exato é feito pelo dia local
+    since = (datetime.combine(d_start, datetime.min.time(), tzinfo=timezone.utc) - timedelta(days=1)).isoformat()
+    query = {"company_id": company_id, "status": "concluida", "created_at": {"$gte": since}, **(extra or {})}
+    sales = await db.sales.find(query, {"_id": 0}).sort("created_at", 1).to_list(50000)
+    return [s for s in sales if d_start <= to_local(s["created_at"], tz_offset).date() <= d_end]
+
+@api_router.get("/reports/abc")
+async def abc_report(start: Optional[str] = None, end: Optional[str] = None, tz_offset: int = 0,
+                     cover_days: int = 15, user: dict = Depends(get_current_user)):
+    """Curva ABC por faturamento: A = até 80% da receita, B = até 95%, C = restante"""
+    require_admin(user)
+    d_start, d_end = parse_period(start, end, tz_offset)
+    days = (d_end - d_start).days + 1
+    cover_days = max(1, min(cover_days, 365))
+    sales = await sales_in_period(user["company_id"], d_start, d_end, tz_offset)
+
+    agg = {}
+    for s in sales:
+        # Distribui o desconto da venda proporcionalmente entre os itens
+        factor = (s["total"] / s["subtotal"]) if s.get("subtotal") else 0
+        for line in s["items"]:
+            a = agg.setdefault(line["product_id"], {"quantity": 0, "revenue": 0.0, "cost": 0.0, "sales": set()})
+            a["quantity"] += line["quantity"]
+            a["revenue"] += line["total"] * factor
+            a["cost"] += line["quantity"] * line.get("unit_cost", 0)
+            a["sales"].add(s["id"])
+
+    products = await db.products.find({"company_id": user["company_id"]}, {"_id": 0}).to_list(5000)
+    rows = []
+    for p in products:
+        a = agg.get(p["id"])
+        if not a and not p.get("active", True):
+            continue
+        a = a or {"quantity": 0, "revenue": 0.0, "cost": 0.0, "sales": set()}
+        rows.append({
+            "product_id": p["id"], "name": product_label(p), "sku": p.get("sku", ""),
+            "quantity": a["quantity"], "revenue": round(a["revenue"], 2),
+            "profit": round(a["revenue"] - a["cost"], 2), "sales_count": len(a["sales"]),
+            "stock": p.get("stock", 0), "min_stock": p.get("min_stock", 0),
+        })
+
+    rows.sort(key=lambda r: (r["revenue"], r["quantity"]), reverse=True)
+    total_revenue = sum(r["revenue"] for r in rows)
+    cumulative = 0.0
+    for r in rows:
+        share = (r["revenue"] / total_revenue * 100) if total_revenue else 0
+        before = cumulative
+        cumulative += share
+        r["share"] = round(share, 2)
+        r["cumulative"] = round(cumulative, 2)
+        r["abc"] = "C" if r["revenue"] <= 0 else ("A" if before < 80 else "B" if before < 95 else "C")
+        avg_daily = r["quantity"] / days
+        r["avg_daily"] = round(avg_daily, 2)
+        r["coverage_days"] = round(r["stock"] / avg_daily, 1) if avg_daily else None
+        # Sugestão: estoque para `cover_days` dias de venda, nunca abaixo do mínimo
+        target = max(math.ceil(avg_daily * cover_days), r["min_stock"])
+        r["suggested_purchase"] = max(0, target - r["stock"])
+
+    summary = {}
+    for cls in ("A", "B", "C"):
+        items = [r for r in rows if r["abc"] == cls]
+        rev = sum(r["revenue"] for r in items)
+        summary[cls] = {"count": len(items), "revenue": round(rev, 2),
+                        "share": round(rev / total_revenue * 100, 2) if total_revenue else 0}
+
+    return {
+        "start": d_start.isoformat(), "end": d_end.isoformat(), "days": days, "cover_days": cover_days,
+        "sales_count": len(sales), "total_revenue": round(total_revenue, 2),
+        "summary": summary, "rows": rows,
+    }
+
+@api_router.get("/reports/commissions")
+async def commissions_report(start: Optional[str] = None, end: Optional[str] = None, tz_offset: int = 0,
+                             user: dict = Depends(get_current_user)):
+    """Comissões por vendedor; quem não é admin vê só as próprias"""
+    d_start, d_end = parse_period(start, end, tz_offset)
+    is_admin = user.get("role") == "admin"
+    sales = await sales_in_period(user["company_id"], d_start, d_end, tz_offset)
+    if not is_admin:
+        sales = [s for s in sales if s.get("seller_id", s.get("created_by")) == user["id"]]
+
+    users = await db.users.find({"company_id": user["company_id"]}, {"_id": 0, "password": 0}).to_list(1000)
+    if not is_admin:
+        users = [u for u in users if u["id"] == user["id"]]
+    sellers = {}
+    for u in users:
+        ctype, cvalue = sale_commission_rule(u)
+        sellers[u["id"]] = {"seller_id": u["id"], "seller_name": u["name"], "commission_type": ctype,
+                            "commission_value": cvalue, "sales_count": 0, "total_sold": 0.0, "commission": 0.0}
+    for s in sales:
+        sid = s.get("seller_id", s.get("created_by"))
+        row = sellers.setdefault(sid, {"seller_id": sid, "seller_name": s.get("seller_name") or s.get("created_by_name", ""),
+                                       "commission_type": "", "commission_value": 0, "sales_count": 0,
+                                       "total_sold": 0.0, "commission": 0.0})
+        row["sales_count"] += 1
+        row["total_sold"] += s["total"]
+        row["commission"] += s.get("commission", 0)
+
+    rows = sorted(sellers.values(), key=lambda r: r["commission"], reverse=True)
+    for r in rows:
+        r["total_sold"] = round(r["total_sold"], 2)
+        r["commission"] = round(r["commission"], 2)
+    return {
+        "start": d_start.isoformat(), "end": d_end.isoformat(),
+        "total_commission": round(sum(r["commission"] for r in rows), 2),
+        "rows": rows,
+        "sales": [{"id": s["id"], "number": s["number"], "created_at": s["created_at"],
+                   "seller_name": s.get("seller_name") or s.get("created_by_name", ""),
+                   "total": s["total"], "commission": s.get("commission", 0)} for s in reversed(sales)],
     }
 
 # ==================== CONFIGURAÇÕES DA LOJA ====================

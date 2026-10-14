@@ -10,6 +10,7 @@ import ProductsPage from "./pages/ProductsPage";
 import PurchasesPage from "./pages/PurchasesPage";
 import SalesPage from "./pages/SalesPage";
 import SettingsPage from "./pages/SettingsPage";
+import ReportsPage from "./pages/ReportsPage";
 import UsersPage from "./pages/UsersPage";
 import MasterPage from "./pages/MasterPage";
 
@@ -101,6 +102,7 @@ const AppRoutes = () => {
         <Route path="products" element={<ProductsPage />} />
         <Route path="purchases" element={<PurchasesPage />} />
         <Route path="sales" element={<SalesPage />} />
+        <Route path="reports" element={<ReportsPage />} />
         {/* Users: somente Admin */}
         <Route
           path="users"

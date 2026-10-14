@@ -24,7 +24,19 @@ export const PAYMENT_METHODS = [
 export const paymentLabel = (value) =>
   PAYMENT_METHODS.find((p) => p.value === value)?.label || value;
 
-export const productLabel = (p) => (p.flavor ? `${p.name} - ${p.flavor}` : p.name);
+export const commissionLabel = (type, value, money) =>
+  type === 'percent' ? `${Number(value) || 0}% da venda` : `${money(value ?? 5)} por venda`;
+
+// Período em dias locais (AAAA-MM-DD) terminando hoje
+export const lastDays = (days) => {
+  const iso = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - (days - 1));
+  return { start: iso(start), end: iso(end) };
+};
+
+export const productLabel =(p) => (p.flavor ? `${p.name} - ${p.flavor}` : p.name);
 
 export const stockStatus = (p) => {
   if (p.stock <= 0) return { key: 'critical', label: 'Sem estoque' };

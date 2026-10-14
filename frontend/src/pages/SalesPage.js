@@ -25,10 +25,11 @@ import { API_URL as API } from '../config';
 
 const EMPTY_HEADER = {
   customer_name: '', customer_doc: '', customer_phone: '', payment_method: 'dinheiro', discount: '', notes: '',
+  seller_id: '',
 };
 
 const SalesPage = () => {
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { money } = useStore();
   const [sales, setSales] = useState([]);
   const [products, setProducts] = useState([]);
@@ -40,6 +41,7 @@ const SalesPage = () => {
   const [lines, setLines] = useState([emptyLine()]);
   const [viewing, setViewing] = useState(null);
   const [cancelling, setCancelling] = useState(null);
+  const [sellers, setSellers] = useState([]);
 
   useEffect(() => {
     fetchData();
@@ -53,6 +55,7 @@ const SalesPage = () => {
       ]);
       setSales(sRes.data);
       setProducts(prodRes.data);
+      if (isAdmin) setSellers((await axios.get(`${API}/users`)).data);
     } catch (err) {
       toast.error(apiError(err, 'Falha ao carregar vendas'));
     } finally {
@@ -87,6 +90,7 @@ const SalesPage = () => {
     try {
       const res = await axios.post(`${API}/sales`, {
         ...header,
+        seller_id: header.seller_id || null,
         discount,
         tz_offset: tzOffset(),
         items: lines.map((l) => ({
@@ -166,7 +170,7 @@ const SalesPage = () => {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Fatura</th><th>Data</th><th>Cliente</th><th>Pagamento</th>
+                    <th>Fatura</th><th>Data</th><th>Cliente</th><th>Vendedor</th><th>Pagamento</th>
                     <th className="text-right">Total</th><th>Status</th><th />
                   </tr>
                 </thead>
@@ -176,6 +180,7 @@ const SalesPage = () => {
                       <td className="font-mono font-medium">{s.number}</td>
                       <td className="text-sm">{formatDateTime(s.created_at)}</td>
                       <td>{s.customer_name || 'Consumidor final'}</td>
+                      <td className="text-sm">{s.seller_name || s.created_by_name}</td>
                       <td className="text-sm">{paymentLabel(s.payment_method)}</td>
                       <td className="text-right font-mono">{money(s.total)}</td>
                       <td>
@@ -223,6 +228,15 @@ const SalesPage = () => {
                 <Input value={header.customer_name} placeholder="Consumidor final"
                   onChange={(e) => setHeader({ ...header, customer_name: e.target.value })} />
               </div>
+              {isAdmin && sellers.length > 1 && (
+                <div className="space-y-1 sm:col-span-3">
+                  <Label>Vendedor (recebe a comissão)</Label>
+                  <select className={SELECT_CLASS} value={header.seller_id || user?.id}
+                    onChange={(e) => setHeader({ ...header, seller_id: e.target.value })}>
+                    {sellers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="space-y-1">
                 <Label>CPF/NIF</Label>
                 <Input value={header.customer_doc}
@@ -279,7 +293,7 @@ const SalesPage = () => {
             <DialogTitle className="font-heading">Fatura {viewing?.number}</DialogTitle>
             <DialogDescription>
               {viewing && formatDateTime(viewing.created_at)} · {viewing?.customer_name || 'Consumidor final'}
-              {' · '}{viewing && paymentLabel(viewing.payment_method)} · por {viewing?.created_by_name}
+              {' · '}{viewing && paymentLabel(viewing.payment_method)} · vendedor: {viewing?.seller_name || viewing?.created_by_name}
             </DialogDescription>
           </DialogHeader>
           {viewing && (
@@ -301,7 +315,8 @@ const SalesPage = () => {
               </table>
               <div className="text-sm text-slate-600 space-y-1">
                 {viewing.discount > 0 && <p>Desconto: {money(viewing.discount)}</p>}
-                {isAdmin && <p>Lucro estimado: {money(viewing.profit)}</p>}
+                {viewing.commission > 0 && <p>Comissão: {money(viewing.commission)}</p>}
+                {isAdmin && <p>Lucro estimado (após comissão): {money(viewing.profit)}</p>}
                 {viewing.notes && <p>Obs.: {viewing.notes}</p>}
               </div>
               <div className="flex flex-wrap justify-between items-center gap-2">

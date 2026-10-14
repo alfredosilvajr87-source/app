@@ -6,6 +6,7 @@ import {
   Package,
   Receipt,
   Truck,
+  BarChart3,
   Settings,
   Store,
   ChevronLeft,
@@ -23,7 +24,8 @@ const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {
     { path: '/sales',     label: 'Vendas',        icon: Receipt },
     { path: '/purchases', label: 'Compras',       icon: Truck },
     { path: '/products',  label: 'Produtos',      icon: Package },
-    { path: '/users',     label: 'Usuários',      icon: Users,     adminOnly: true },
+    { path: '/reports',   label: 'Relatórios',    icon: BarChart3 },
+    { path: '/users',    label: 'Usuários',      icon: Users,     adminOnly: true },
     { path: '/settings',  label: 'Configurações', icon: Settings },
   ];
 
@@ -33,7 +35,7 @@ const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {
     { path: '/sales',     label: 'Vendas',   icon: Receipt },
     { path: '/purchases', label: 'Compras',  icon: Truck },
     { path: '/products',  label: 'Produtos', icon: Package },
-    { path: '/settings',  label: 'Config.',  icon: Settings },
+    { path: '/reports',   label: 'Relatórios', icon: BarChart3 },
   ];
 
   return (

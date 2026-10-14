@@ -15,7 +15,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../components/ui/alert-dialog';
-import { Package, Plus, Pencil, Trash2, Search, SlidersHorizontal, History, Sparkles } from 'lucide-react';
+import { Package, Plus, Pencil, Trash2, Search, SlidersHorizontal, History, Sparkles, Tags } from 'lucide-react';
 import { apiError, formatDateTime, productLabel, stockStatus } from '../lib/store';
 
 import { API_URL as API } from '../config';
@@ -42,6 +42,20 @@ const ProductsPage = () => {
   const [adjustForm, setAdjustForm] = useState({ new_stock: '', reason: '' });
   const [historyOf, setHistoryOf] = useState(null);
   const [movements, setMovements] = useState([]);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkPrice, setBulkPrice] = useState('130');
+
+  const handleBulkPrice = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await axios.post(`${API}/products/bulk-price`, { sale_price: parseFloat(bulkPrice) || 0 });
+      toast.success(res.data.message);
+      setBulkOpen(false);
+      fetchProducts();
+    } catch (err) {
+      toast.error(apiError(err));
+    }
+  };
 
   useEffect(() => {
     fetchProducts();
@@ -164,9 +178,16 @@ const ProductsPage = () => {
           <p className="text-slate-500 mt-1">Cadastro de vapers, preços e estoque atual</p>
         </div>
         {isAdmin && (
-          <Button onClick={openNew} data-testid="new-product-btn">
-            <Plus className="h-4 w-4 mr-2" /> Novo produto
-          </Button>
+          <div className="flex gap-2">
+            {products.length > 0 && (
+              <Button variant="outline" onClick={() => setBulkOpen(true)}>
+                <Tags className="h-4 w-4 mr-2" /> Preço para todos
+              </Button>
+            )}
+            <Button onClick={openNew} data-testid="new-product-btn">
+              <Plus className="h-4 w-4 mr-2" /> Novo produto
+            </Button>
+          </div>
         )}
       </div>
 
@@ -326,6 +347,30 @@ const ProductsPage = () => {
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Cancelar</Button>
               <Button type="submit">{editing ? 'Salvar' : 'Cadastrar'}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Preço único para todos */}
+      <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-heading">Preço de venda para todos</DialogTitle>
+            <DialogDescription>
+              Define o mesmo preço de venda para todos os produtos ativos. Vendas já feitas não mudam.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleBulkPrice} className="space-y-4">
+            <div className="space-y-1">
+              <Label>Novo preço de venda</Label>
+              <Input type="number" min="0" step="0.01" required value={bulkPrice}
+                onChange={(e) => setBulkPrice(e.target.value)} />
+              <p className="text-xs text-slate-500">{money(parseFloat(bulkPrice) || 0)} por unidade</p>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setBulkOpen(false)}>Cancelar</Button>
+              <Button type="submit">Aplicar a todos</Button>
             </DialogFooter>
           </form>
         </DialogContent>
