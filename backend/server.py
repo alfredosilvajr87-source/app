@@ -3161,6 +3161,276 @@ async def delete_waste_entry(entry_id: str, user: dict = Depends(get_current_use
     await db.waste_entries.delete_one({"id": entry_id, "company_id": user["company_id"]})
     return {"message": "Deleted"}
 
+# ==================== VAPE STORE: PRODUCTS, PURCHASES & STOCK ====================
+# Catálogo de vapers com estoque. Toda alteração de estoque passa por
+# apply_stock_movement(), que grava um registro em stock_movements
+# (type: "purchase" entra, "sale" sai, "adjustment" corrige).
+
+class ProductCreate(BaseModel):
+    name: str
+    brand: Optional[str] = ""
+    flavor: Optional[str] = ""
+    puffs: Optional[int] = 0
+    nicotine: Optional[str] = ""
+    sku: Optional[str] = ""
+    cost_price: float = 0.0
+    sale_price: float = 0.0
+    minimum_stock: float = 0
+    active: bool = True
+
+class ProductResponse(BaseModel):
+    id: str
+    company_id: str
+    name: str
+    brand: str = ""
+    flavor: str = ""
+    puffs: int = 0
+    nicotine: str = ""
+    sku: str = ""
+    cost_price: float = 0.0
+    sale_price: float = 0.0
+    stock_quantity: float = 0
+    minimum_stock: float = 0
+    active: bool = True
+    created_at: str
+
+class PurchaseItemCreate(BaseModel):
+    product_id: str
+    quantity: float = Field(gt=0)
+    unit_cost: float = Field(ge=0)
+
+class PurchaseCreate(BaseModel):
+    supplier: Optional[str] = ""
+    items: List[PurchaseItemCreate]
+    notes: Optional[str] = ""
+
+class PurchaseResponse(BaseModel):
+    id: str
+    purchase_number: str
+    company_id: str
+    supplier: str = ""
+    items: List[dict]
+    total: float
+    notes: str = ""
+    created_by: str
+    created_by_name: Optional[str] = ""
+    created_at: str
+
+class StockMovementResponse(BaseModel):
+    id: str
+    product_id: str
+    product_name: str
+    type: str
+    quantity: float
+    unit_value: float = 0.0
+    balance_after: float
+    reference_type: Optional[str] = ""
+    reference_id: Optional[str] = ""
+    created_by_name: Optional[str] = ""
+    created_at: str
+
+VAPE_SEED_PRODUCTS = [
+    # (name, brand, flavor, puffs, nicotine, cost, sale, min_stock)
+    ("Ignite V80", "Ignite", "Strawberry Watermelon", 8000, "5%", 45.0, 89.9, 5),
+    ("Ignite V150", "Ignite", "Blue Razz Ice", 15000, "5%", 65.0, 129.9, 5),
+    ("Elf Bar BC10000", "Elf Bar", "Watermelon Ice", 10000, "5%", 55.0, 109.9, 5),
+    ("Elf Bar TE6000", "Elf Bar", "Grape", 6000, "5%", 40.0, 79.9, 5),
+    ("Lost Mary MO5000", "Lost Mary", "Blueberry Raspberry", 5000, "5%", 38.0, 74.9, 5),
+    ("Oxbar Magic Maze", "Oxbar", "Mango Peach", 10000, "5%", 50.0, 99.9, 5),
+    ("Geek Bar Pulse", "Geek Bar", "Sour Apple Ice", 15000, "5%", 62.0, 124.9, 5),
+    ("Waka SoPro 10K", "Waka", "Mint", 10000, "5%", 52.0, 104.9, 5),
+    ("Vaporesso XROS 4", "Vaporesso", "Pod recarregável", 0, "-", 120.0, 229.9, 2),
+    ("Juice Salt 30ml", "Nasty Juice", "Cushman Mango", 0, "35mg", 25.0, 49.9, 10),
+]
+
+def _product_doc_defaults(p: dict) -> dict:
+    for k, v in (("brand", ""), ("flavor", ""), ("puffs", 0), ("nicotine", ""), ("sku", ""),
+                 ("cost_price", 0.0), ("sale_price", 0.0), ("stock_quantity", 0),
+                 ("minimum_stock", 0), ("active", True)):
+        if p.get(k) is None:
+            p[k] = v
+    return p
+
+async def seed_vape_products(company_id: str) -> int:
+    """Cria os 10 vapers de exemplo (estoque zerado; o estoque entra pelas compras)."""
+    created = 0
+    for i, (name, brand, flavor, puffs, nic, cost, sale, min_stock) in enumerate(VAPE_SEED_PRODUCTS, 1):
+        if await db.products.find_one({"company_id": company_id, "name": name}):
+            continue
+        await db.products.insert_one({
+            "id": str(uuid.uuid4()), "company_id": company_id, "name": name, "brand": brand,
+            "flavor": flavor, "puffs": puffs, "nicotine": nic, "sku": f"VP-{i:03d}",
+            "cost_price": cost, "sale_price": sale, "stock_quantity": 0,
+            "minimum_stock": min_stock, "active": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        created += 1
+    await db.companies.update_one({"id": company_id}, {"$set": {"vape_seeded": True}})
+    return created
+
+async def apply_stock_movement(company_id: str, product_id: str, delta: float, movement_type: str,
+                               user: dict, unit_value: float = 0.0,
+                               reference_type: str = "", reference_id: str = "") -> dict:
+    """Aplica uma variação de estoque (delta > 0 entra, < 0 sai) de forma atômica.
+    Recusa saídas que deixariam o estoque negativo."""
+    query = {"id": product_id, "company_id": company_id}
+    if delta < 0:
+        query["stock_quantity"] = {"$gte": -delta}
+    product = await db.products.find_one_and_update(
+        query, {"$inc": {"stock_quantity": delta}},
+        projection={"_id": 0},
+    )
+    if not product:
+        exists = await db.products.find_one({"id": product_id, "company_id": company_id}, {"_id": 0})
+        if not exists:
+            raise HTTPException(status_code=404, detail="Produto não encontrado")
+        raise HTTPException(status_code=400, detail=f"Estoque insuficiente para {exists['name']} (disponível: {exists.get('stock_quantity', 0):g})")
+    product["stock_quantity"] = product.get("stock_quantity", 0) + delta
+    movement = {
+        "id": str(uuid.uuid4()), "company_id": company_id, "product_id": product_id,
+        "product_name": product["name"], "type": movement_type, "quantity": delta,
+        "unit_value": unit_value, "balance_after": product["stock_quantity"],
+        "reference_type": reference_type, "reference_id": reference_id,
+        "created_by": user["id"], "created_by_name": user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.stock_movements.insert_one(movement)
+    return product
+
+async def generate_document_number(prefix: str, company_id: str) -> str:
+    """Gera números sequenciais por empresa e ano, ex.: CP-2026-001."""
+    year = datetime.now(timezone.utc).year
+    counter = await db.counters.find_one_and_update(
+        {"company_id": company_id, "key": f"{prefix}-{year}"},
+        {"$inc": {"seq": 1}}, upsert=True, return_document=True,
+    )
+    return f"{prefix}-{year}-{counter['seq']:03d}"
+
+@api_router.get("/products", response_model=List[ProductResponse])
+async def get_products(user: dict = Depends(get_current_user)):
+    company_id = user["company_id"]
+    company = await db.companies.find_one({"id": company_id}, {"_id": 0}) or {}
+    if not company.get("vape_seeded") and await db.products.count_documents({"company_id": company_id}) == 0:
+        await seed_vape_products(company_id)
+    products = await db.products.find({"company_id": company_id}, {"_id": 0}).sort("name", 1).to_list(2000)
+    return [ProductResponse(**_product_doc_defaults(p)) for p in products]
+
+@api_router.post("/products/seed")
+async def seed_products(user: dict = Depends(get_current_user)):
+    require_admin(user)
+    created = await seed_vape_products(user["company_id"])
+    return {"created": created}
+
+@api_router.post("/products", response_model=ProductResponse)
+async def create_product(product: ProductCreate, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    if await db.products.find_one({"company_id": user["company_id"], "name": product.name}):
+        raise HTTPException(status_code=400, detail="Já existe um produto com esse nome")
+    doc = {
+        "id": str(uuid.uuid4()), "company_id": user["company_id"], **product.model_dump(),
+        "stock_quantity": 0, "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.products.insert_one(doc)
+    doc.pop("_id", None)
+    return ProductResponse(**_product_doc_defaults(doc))
+
+@api_router.put("/products/{product_id}", response_model=ProductResponse)
+async def update_product(product_id: str, product: ProductCreate, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    if await db.products.find_one({"company_id": user["company_id"], "name": product.name, "id": {"$ne": product_id}}):
+        raise HTTPException(status_code=400, detail="Já existe um produto com esse nome")
+    # stock_quantity não é editável aqui: só muda via compras/vendas/ajustes
+    result = await db.products.update_one(
+        {"id": product_id, "company_id": user["company_id"]}, {"$set": product.model_dump()}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+    updated = await db.products.find_one({"id": product_id}, {"_id": 0})
+    return ProductResponse(**_product_doc_defaults(updated))
+
+@api_router.delete("/products/{product_id}")
+async def delete_product(product_id: str, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    if await db.stock_movements.find_one({"company_id": user["company_id"], "product_id": product_id}):
+        raise HTTPException(status_code=400, detail="Produto tem movimentações de estoque; desative-o em vez de excluir")
+    result = await db.products.delete_one({"id": product_id, "company_id": user["company_id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+    return {"message": "Produto excluído"}
+
+@api_router.get("/purchases", response_model=List[PurchaseResponse])
+async def get_purchases(user: dict = Depends(get_current_user)):
+    purchases = await db.purchases.find({"company_id": user["company_id"]}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return [PurchaseResponse(**p) for p in purchases]
+
+@api_router.get("/purchases/{purchase_id}", response_model=PurchaseResponse)
+async def get_purchase(purchase_id: str, user: dict = Depends(get_current_user)):
+    purchase = await db.purchases.find_one({"id": purchase_id, "company_id": user["company_id"]}, {"_id": 0})
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Compra não encontrada")
+    return PurchaseResponse(**purchase)
+
+@api_router.post("/purchases", response_model=PurchaseResponse)
+async def create_purchase(purchase: PurchaseCreate, user: dict = Depends(get_current_user)):
+    company_id = user["company_id"]
+    if not purchase.items:
+        raise HTTPException(status_code=400, detail="Adicione ao menos um item")
+    products = {}
+    for it in purchase.items:
+        p = await db.products.find_one({"id": it.product_id, "company_id": company_id}, {"_id": 0})
+        if not p:
+            raise HTTPException(status_code=404, detail="Produto não encontrado")
+        products[it.product_id] = p
+    purchase_id = str(uuid.uuid4())
+    items = [{
+        "product_id": it.product_id, "product_name": products[it.product_id]["name"],
+        "quantity": it.quantity, "unit_cost": it.unit_cost,
+        "total": round(it.quantity * it.unit_cost, 2),
+    } for it in purchase.items]
+    doc = {
+        "id": purchase_id,
+        "purchase_number": await generate_document_number("CP", company_id),
+        "company_id": company_id, "supplier": purchase.supplier or "", "items": items,
+        "total": round(sum(i["total"] for i in items), 2), "notes": purchase.notes or "",
+        "created_by": user["id"], "created_by_name": user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.purchases.insert_one(doc)
+    for it in purchase.items:
+        await apply_stock_movement(company_id, it.product_id, it.quantity, "purchase", user,
+                                   unit_value=it.unit_cost, reference_type="purchase", reference_id=purchase_id)
+        # Último custo de compra vira o custo do produto
+        await db.products.update_one({"id": it.product_id, "company_id": company_id},
+                                     {"$set": {"cost_price": it.unit_cost}})
+    doc.pop("_id", None)
+    return PurchaseResponse(**doc)
+
+@api_router.delete("/purchases/{purchase_id}")
+async def delete_purchase(purchase_id: str, user: dict = Depends(get_current_user)):
+    """Cancela uma compra e retira do estoque o que ela tinha lançado."""
+    require_admin(user)
+    company_id = user["company_id"]
+    purchase = await db.purchases.find_one({"id": purchase_id, "company_id": company_id}, {"_id": 0})
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Compra não encontrada")
+    for p in await db.products.find({"company_id": company_id, "id": {"$in": [i["product_id"] for i in purchase["items"]]}}, {"_id": 0}).to_list(500):
+        needed = sum(i["quantity"] for i in purchase["items"] if i["product_id"] == p["id"])
+        if p.get("stock_quantity", 0) < needed:
+            raise HTTPException(status_code=400, detail=f"Não é possível cancelar: {p['name']} já foi vendido (estoque atual {p.get('stock_quantity', 0):g})")
+    for it in purchase["items"]:
+        await apply_stock_movement(company_id, it["product_id"], -it["quantity"], "adjustment", user,
+                                   unit_value=it["unit_cost"], reference_type="purchase_cancel", reference_id=purchase_id)
+    await db.purchases.delete_one({"id": purchase_id, "company_id": company_id})
+    return {"message": "Compra cancelada"}
+
+@api_router.get("/stock-movements", response_model=List[StockMovementResponse])
+async def get_stock_movements(product_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    query = {"company_id": user["company_id"]}
+    if product_id:
+        query["product_id"] = product_id
+    movements = await db.stock_movements.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return [StockMovementResponse(**m) for m in movements]
+
 # ==================== ROOT ====================
 
 @api_router.post("/admin/migrate-unit-ids")

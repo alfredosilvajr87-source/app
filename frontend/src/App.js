@@ -16,6 +16,8 @@ import UsersPage from "./pages/UsersPage";
 import DailyPrepPage from "./pages/DailyPrepPage";
 import DailyWastePage from "./pages/DailyWastePage";
 import MasterPage from "./pages/MasterPage";
+import ProductsPage from "./pages/ProductsPage";
+import PurchasesPage from "./pages/PurchasesPage";
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -101,7 +103,11 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Dashboard />} />
+        <Route index element={<Navigate to="/vapers" replace />} />
+        <Route path="vapers" element={<ProductsPage />} />
+        <Route path="purchases" element={<PurchasesPage />} />
+        {/* Telas do sistema de restaurante: fora do menu, mantidas por enquanto */}
+        <Route path="dashboard" element={<Dashboard />} />
         <Route path="sections" element={<SectionsPage />} />
         <Route path="items" element={<ItemsPage />} />
         <Route path="daily-entry" element={<DailyEntryPage />} />
