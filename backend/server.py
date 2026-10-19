@@ -12,6 +12,7 @@ import asyncio
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Literal
+import re
 import uuid
 from datetime import datetime, timezone, timedelta
 from jose import jwt, JWTError
@@ -653,7 +654,17 @@ class SaleCreate(BaseModel):
     items: List[SaleItemIn]
     notes: Optional[str] = ""
     seller_id: Optional[str] = None    # admin pode lançar a venda em nome de um funcionário
+    coupon_code: Optional[str] = ""    # cupom no lugar do desconto manual
+    use_loyalty: bool = False          # aplica o desconto de fidelidade do cliente (pelo telefone)
     tz_offset: int = 0
+
+class CouponIn(BaseModel):
+    code: str = Field(..., min_length=2, max_length=30)
+    discount_type: Literal["percent", "fixed"] = "percent"
+    value: float = Field(..., gt=0)
+    valid_until: Optional[str] = ""    # AAAA-MM-DD (vazio = sem validade)
+    max_uses: int = Field(0, ge=0)     # 0 = sem limite
+    active: bool = True
 
 class StoreSettings(BaseModel):
     currency: str = "BRL"
@@ -662,6 +673,8 @@ class StoreSettings(BaseModel):
     phone: Optional[str] = ""
     email: Optional[str] = ""
     invoice_footer: Optional[str] = ""
+    loyalty_every: int = Field(0, ge=0)             # a cada X compras o cliente ganha desconto na próxima (0 = desligado)
+    loyalty_percent: float = Field(30.0, ge=0, le=100)
 
 PAYMENT_METHODS = {
     "dinheiro": "Dinheiro",
@@ -1035,7 +1048,118 @@ def product_commission(p: dict):
     cvalue = p.get("commission_value")
     return ctype, float(5.0 if cvalue is None else cvalue)
 
-async def build_sale(user: dict, data: SaleCreate, default_seller: Optional[dict] = None) -> dict:
+# ==================== CUPONS E FIDELIDADE ====================
+
+def coupon_key(code: str) -> str:
+    return (code or "").strip().upper()
+
+def phone_key(phone: str) -> str:
+    return re.sub(r"\D", "", phone or "")
+
+def coupon_discount(c: dict, subtotal: float) -> float:
+    if c["discount_type"] == "percent":
+        return round(subtotal * min(c["value"], 100) / 100, 2)
+    return round(min(c["value"], subtotal), 2)
+
+async def find_valid_coupon(company_id: str, code: str, today: str) -> dict:
+    c = await db.coupons.find_one({"company_id": company_id, "code": coupon_key(code)}, {"_id": 0})
+    if not c or not c.get("active", True):
+        raise HTTPException(status_code=400, detail="Cupom inválido ou inativo")
+    if c.get("valid_until") and today > c["valid_until"]:
+        raise HTTPException(status_code=400, detail="Cupom vencido")
+    if c.get("max_uses") and c.get("uses", 0) >= c["max_uses"]:
+        raise HTTPException(status_code=400, detail="Cupom já atingiu o limite de usos")
+    return c
+
+async def use_coupon(company_id: str, code: str):
+    """Conta um uso de forma atômica, respeitando o limite"""
+    if not code:
+        return
+    res = await db.coupons.update_one(
+        {"company_id": company_id, "code": code,
+         "$or": [{"max_uses": 0}, {"$expr": {"$lt": ["$uses", "$max_uses"]}}]},
+        {"$inc": {"uses": 1}}
+    )
+    if res.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Cupom já atingiu o limite de usos")
+
+async def release_coupon(company_id: str, code: str):
+    if code:
+        await db.coupons.update_one({"company_id": company_id, "code": code, "uses": {"$gt": 0}},
+                                    {"$inc": {"uses": -1}})
+
+async def loyalty_status(company_id: str, phone: str, exclude_sale_id: str = "") -> dict:
+    """Compras concluídas do cliente (pelo telefone) desde o último desconto de fidelidade"""
+    settings = await get_store_settings(company_id)
+    every, percent = settings["loyalty_every"], settings["loyalty_percent"]
+    key = phone_key(phone)
+    count = 0
+    if key and every > 0:
+        sales = await db.sales.find(
+            {"company_id": company_id, "status": "concluida", "customer_phone": {"$nin": ["", None]}},
+            {"_id": 0, "id": 1, "customer_phone": 1, "loyalty_applied": 1, "created_at": 1}
+        ).sort("created_at", 1).to_list(20000)
+        for s in sales:
+            if s["id"] == exclude_sale_id or phone_key(s["customer_phone"]) != key:
+                continue
+            count = 0 if s.get("loyalty_applied") else count + 1
+    return {"enabled": every > 0, "every": every, "percent": percent, "count": count,
+            "eligible": bool(key) and every > 0 and count >= every}
+
+@api_router.get("/coupons")
+async def list_coupons(user: dict = Depends(get_current_user)):
+    require_admin(user)
+    return await db.coupons.find({"company_id": user["company_id"]}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+def check_coupon(data: CouponIn) -> dict:
+    if data.discount_type == "percent" and data.value > 100:
+        raise HTTPException(status_code=400, detail="Desconto em porcentagem não pode passar de 100%")
+    if data.valid_until:
+        parse_day(data.valid_until)
+    return {**data.model_dump(), "code": coupon_key(data.code)}
+
+@api_router.post("/coupons")
+async def create_coupon(data: CouponIn, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    fields = check_coupon(data)
+    if await db.coupons.find_one({"company_id": user["company_id"], "code": fields["code"]}):
+        raise HTTPException(status_code=400, detail="Já existe um cupom com esse código")
+    doc = {"id": str(uuid.uuid4()), "company_id": user["company_id"], **fields, "uses": 0, "created_at": now_iso()}
+    await db.coupons.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.put("/coupons/{coupon_id}")
+async def update_coupon(coupon_id: str, data: CouponIn, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    current = await db.coupons.find_one({"id": coupon_id, "company_id": user["company_id"]}, {"_id": 0})
+    if not current:
+        raise HTTPException(status_code=404, detail="Cupom não encontrado")
+    fields = check_coupon(data)
+    if fields["code"] != current["code"]:
+        raise HTTPException(status_code=400, detail="O código do cupom não pode ser alterado")
+    await db.coupons.update_one({"id": coupon_id}, {"$set": fields})
+    return {**current, **fields}
+
+@api_router.delete("/coupons/{coupon_id}")
+async def delete_coupon(coupon_id: str, user: dict = Depends(get_current_user)):
+    require_admin(user)
+    result = await db.coupons.delete_one({"id": coupon_id, "company_id": user["company_id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Cupom não encontrado")
+    return {"message": "Cupom excluído (vendas antigas continuam com o desconto)"}
+
+@api_router.get("/coupons/check/{code}")
+async def check_coupon_code(code: str, tz_offset: int = 0, user: dict = Depends(get_current_user)):
+    c = await find_valid_coupon(user["company_id"], code, local_today(tz_offset))
+    return {"code": c["code"], "discount_type": c["discount_type"], "value": c["value"]}
+
+@api_router.get("/loyalty")
+async def get_loyalty(phone: str = "", exclude_sale_id: str = "", user: dict = Depends(get_current_user)):
+    return await loyalty_status(user["company_id"], phone, exclude_sale_id)
+
+async def build_sale(user: dict, data: SaleCreate, default_seller: Optional[dict] = None,
+                     current_sale: Optional[dict] = None) -> dict:
     """Valida a venda e calcula linhas, totais e comissão por item (sem mexer no estoque)"""
     if not data.items:
         raise HTTPException(status_code=400, detail="Adicione pelo menos um item")
@@ -1070,9 +1194,31 @@ async def build_sale(user: dict, data: SaleCreate, default_seller: Optional[dict
             "commission_type": ctype, "commission_rate": cvalue,
         })
     subtotal = round(sum(l["total"] for l in lines), 2)
-    if data.discount > subtotal:
+
+    # Desconto: cupom OU fidelidade (nunca os dois); sem eles vale o desconto manual
+    discount, coupon, loyalty = data.discount, "", False
+    code = coupon_key(data.coupon_code)
+    if code and data.use_loyalty:
+        raise HTTPException(status_code=400, detail="Use o cupom ou a fidelidade, não os dois na mesma venda")
+    if code:
+        if current_sale and current_sale.get("coupon_code") == code:
+            c = await db.coupons.find_one({"company_id": user["company_id"], "code": code}, {"_id": 0})
+            if not c:
+                raise HTTPException(status_code=400, detail="Cupom não existe mais")
+        else:
+            c = await find_valid_coupon(user["company_id"], code, local_today(data.tz_offset))
+        discount, coupon = coupon_discount(c, subtotal), code
+    elif data.use_loyalty:
+        if not (current_sale and current_sale.get("loyalty_applied")):
+            status = await loyalty_status(user["company_id"], data.customer_phone,
+                                          current_sale["id"] if current_sale else "")
+            if not status["eligible"]:
+                raise HTTPException(status_code=400, detail="Cliente ainda não tem desconto de fidelidade")
+        settings = await get_store_settings(user["company_id"])
+        discount, loyalty = round(subtotal * min(settings["loyalty_percent"], 100) / 100, 2), True
+    if discount > subtotal:
         raise HTTPException(status_code=400, detail="Desconto maior que o total da venda")
-    total = round(subtotal - data.discount, 2)
+    total = round(subtotal - discount, 2)
 
     # Comissão por item: fixa = valor × quantidade; % = sobre o valor do item já com o desconto rateado
     factor = (total / subtotal) if subtotal else 0
@@ -1084,7 +1230,8 @@ async def build_sale(user: dict, data: SaleCreate, default_seller: Optional[dict
     commission = round(sum(l["commission"] for l in lines), 2)
     cost = round(sum(l["quantity"] * l["unit_cost"] for l in lines), 2)
     return {"seller": seller, "products": products, "needed": needed, "lines": lines,
-            "subtotal": subtotal, "total": total, "cost": cost, "commission": commission}
+            "subtotal": subtotal, "total": total, "cost": cost, "commission": commission,
+            "discount": round(discount, 2), "coupon_code": coupon, "loyalty_applied": loyalty}
 
 async def take_stock(company_id: str, needed: dict, products: dict):
     """Baixa atômica: só desconta se houver saldo; se faltar algo, desfaz o que já baixou"""
@@ -1119,7 +1266,9 @@ def sale_fields(data: SaleCreate, b: dict) -> dict:
         "payment_method": data.payment_method,
         "items": b["lines"],
         "subtotal": b["subtotal"],
-        "discount": round(data.discount, 2),
+        "discount": b["discount"],
+        "coupon_code": b["coupon_code"],
+        "loyalty_applied": b["loyalty_applied"],
         "total": b["total"],
         "cost": b["cost"],
         "commission": b["commission"],
@@ -1134,7 +1283,12 @@ async def create_sale(data: SaleCreate, user: dict = Depends(get_current_user)):
     today = local_today(data.tz_offset)
     await ensure_cash_open(user["company_id"], today)
     b = await build_sale(user, data)
-    await take_stock(user["company_id"], b["needed"], b["products"])
+    await use_coupon(user["company_id"], b["coupon_code"])
+    try:
+        await take_stock(user["company_id"], b["needed"], b["products"])
+    except HTTPException:
+        await release_coupon(user["company_id"], b["coupon_code"])
+        raise
 
     sale_id = str(uuid.uuid4())
     number = await next_number(user["company_id"], "sale", "FAT")
@@ -1167,7 +1321,11 @@ async def update_sale(sale_id: str, data: SaleCreate, user: dict = Depends(get_c
     await ensure_cash_open(user["company_id"], doc_local_date(sale))
     current_seller = await db.users.find_one({"id": sale.get("seller_id", sale.get("created_by"))}, {"_id": 0}) \
         or {"id": sale.get("seller_id"), "name": sale.get("seller_name", "")}
-    b = await build_sale(user, data, default_seller=current_seller)
+    b = await build_sale(user, data, default_seller=current_seller, current_sale=sale)
+    old_coupon = sale.get("coupon_code", "")
+    coupon_changed = b["coupon_code"] != old_coupon
+    if coupon_changed:
+        await use_coupon(user["company_id"], b["coupon_code"])
 
     # Devolve os itens antigos e baixa os novos; se faltar estoque, volta ao estado anterior
     old_needed = sale_needed(sale)
@@ -1178,7 +1336,11 @@ async def update_sale(sale_id: str, data: SaleCreate, user: dict = Depends(get_c
     except HTTPException:
         for pid, qty in old_needed.items():
             await db.products.update_one({"id": pid}, {"$inc": {"stock": -qty}})
+        if coupon_changed:
+            await release_coupon(user["company_id"], b["coupon_code"])
         raise
+    if coupon_changed:
+        await release_coupon(user["company_id"], old_coupon)
     names = {l["product_id"]: l["product_name"] for l in sale["items"]}
     for pid, qty in old_needed.items():
         await log_movement(user, {"id": pid, "name": names[pid]}, qty, "estorno", "venda", sale_id,
@@ -1216,6 +1378,7 @@ async def cancel_sale(sale_id: str, user: dict = Depends(get_current_user)):
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="Venda não encontrada ou já cancelada")
+    await release_coupon(user["company_id"], sale.get("coupon_code", ""))
     names = {l["product_id"]: l["product_name"] for l in sale["items"]}
     for pid, qty in sale_needed(sale).items():
         await db.products.update_one({"id": pid}, {"$inc": {"stock": qty}})

@@ -27,7 +27,7 @@ import { API_URL as API } from '../config';
 
 const EMPTY_HEADER = {
   customer_name: '', customer_doc: '', customer_phone: '', payment_method: 'dinheiro', discount: '', notes: '',
-  seller_id: '',
+  seller_id: '', coupon_code: '', use_loyalty: false,
 };
 
 const commissionText = (l, money) =>
@@ -35,7 +35,7 @@ const commissionText = (l, money) =>
 
 const SalesPage = () => {
   const { user, isAdmin } = useAuth();
-  const { money } = useStore();
+  const { money, settings } = useStore();
   const [sales, setSales] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +49,8 @@ const SalesPage = () => {
   const [cancelling, setCancelling] = useState(null);
   const [reviewing, setReviewing] = useState(null);
   const [sellers, setSellers] = useState([]);
+  const [coupon, setCoupon] = useState(null);         // cupom já conferido no servidor
+  const [loyalty, setLoyalty] = useState(null);       // fidelidade do cliente pelo telefone
 
   const [todayClosed, setTodayClosed] = useState(false);
 
@@ -74,8 +76,35 @@ const SalesPage = () => {
     }
   };
 
+  // Confere a fidelidade quando o telefone do cliente muda
+  useEffect(() => {
+    if (!formOpen || !header.customer_phone.replace(/\D/g, '')) {
+      setLoyalty(null);
+      return undefined;
+    }
+    const t = setTimeout(() => {
+      axios.get(`${API}/loyalty`, { params: { phone: header.customer_phone, exclude_sale_id: editing?.id || '' } })
+        .then((r) => setLoyalty(r.data)).catch(() => setLoyalty(null));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [formOpen, header.customer_phone, editing]);
+
+  const applyCoupon = async () => {
+    try {
+      const res = await axios.get(`${API}/coupons/check/${encodeURIComponent(header.coupon_code.trim())}`,
+        { params: { tz_offset: tzOffset() } });
+      setCoupon(res.data);
+      setHeader({ ...header, use_loyalty: false });
+      toast.success(`Cupom ${res.data.code} aplicado`);
+    } catch (err) {
+      setCoupon(null);
+      toast.error(apiError(err, 'Cupom inválido'));
+    }
+  };
+
   const openNew = () => {
     setEditing(null);
+    setCoupon(null);
     setHeader(EMPTY_HEADER);
     setLines([emptyLine()]);
     setFormOpen(true);
@@ -88,8 +117,15 @@ const SalesPage = () => {
       customer_name: sale.customer_name || '', customer_doc: sale.customer_doc || '',
       customer_phone: sale.customer_phone || '', payment_method: sale.payment_method,
       discount: sale.discount ? String(sale.discount) : '', notes: sale.notes || '',
-      seller_id: sale.seller_id || '',
+      seller_id: sale.seller_id || '', coupon_code: sale.coupon_code || '', use_loyalty: !!sale.loyalty_applied,
     });
+    setCoupon(null);
+    if (sale.coupon_code) {
+      // Cupom vencido depois da venda continua valendo nela; a prévia usa o desconto já gravado
+      axios.get(`${API}/coupons/check/${encodeURIComponent(sale.coupon_code)}`)
+        .then((r) => setCoupon(r.data))
+        .catch(() => setCoupon({ code: sale.coupon_code, discount_type: 'fixed', value: sale.discount }));
+    }
     setLines(sale.items.map((l) => ({
       product_id: l.product_id, quantity: String(l.quantity), price: String(l.unit_price),
       commission_type: l.commission_type || 'fixed',
@@ -99,7 +135,16 @@ const SalesPage = () => {
   };
 
   const subtotal = linesTotal(lines);
-  const discount = parseFloat(header.discount) || 0;
+  const loyaltyOk = loyalty?.eligible || !!editing?.loyalty_applied;
+  const loyaltyOn = header.use_loyalty && loyaltyOk;
+  let discount = parseFloat(header.discount) || 0;
+  if (coupon) {
+    discount = coupon.discount_type === 'percent'
+      ? Math.round(subtotal * Math.min(coupon.value, 100)) / 100
+      : Math.min(coupon.value, subtotal);
+  } else if (loyaltyOn) {
+    discount = Math.round(subtotal * (loyalty?.percent ?? settings.loyalty_percent)) / 100;
+  }
 
   // Na edição, o estoque disponível inclui o que a própria venda já tinha baixado
   const stockBonus = {};
@@ -124,6 +169,8 @@ const SalesPage = () => {
       ...header,
       seller_id: header.seller_id || null,
       discount,
+      coupon_code: coupon?.code || '',
+      use_loyalty: !coupon && loyaltyOn,
       tz_offset: tzOffset(),
       items: lines.map((l) => ({
         product_id: l.product_id,
@@ -327,9 +374,40 @@ const SalesPage = () => {
               </div>
               <div className="space-y-1">
                 <Label>Desconto</Label>
-                <Input type="number" min="0" step="0.01" value={header.discount}
+                <Input type="number" min="0" step="0.01" disabled={!!coupon || loyaltyOn}
+                  value={coupon || loyaltyOn ? discount.toFixed(2) : header.discount}
                   onChange={(e) => setHeader({ ...header, discount: e.target.value })} />
               </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label>Cupom</Label>
+                <div className="flex gap-2">
+                  <Input value={header.coupon_code} placeholder="Código do cupom" disabled={!!coupon}
+                    onChange={(e) => setHeader({ ...header, coupon_code: e.target.value.toUpperCase() })} />
+                  {coupon ? (
+                    <Button type="button" variant="outline"
+                      onClick={() => { setCoupon(null); setHeader({ ...header, coupon_code: '' }); }}>Remover</Button>
+                  ) : (
+                    <Button type="button" variant="outline" disabled={!header.coupon_code.trim()} onClick={applyCoupon}>Aplicar</Button>
+                  )}
+                </div>
+              </div>
+              {loyalty?.enabled && !coupon && (
+                <div className="sm:col-span-3 text-sm rounded-lg border p-3 flex flex-wrap items-center justify-between gap-2">
+                  {loyaltyOk ? (
+                    <>
+                      <span>Cliente tem {loyalty.percent}% de desconto de fidelidade nesta compra.</span>
+                      <Button type="button" size="sm" variant={loyaltyOn ? 'outline' : 'default'}
+                        onClick={() => setHeader({ ...header, use_loyalty: !loyaltyOn })}>
+                        {loyaltyOn ? 'Não usar' : 'Aplicar fidelidade'}
+                      </Button>
+                    </>
+                  ) : (
+                    <span className="text-slate-500">
+                      Fidelidade: {loyalty.count} de {loyalty.every} compras. Faltam {loyalty.every - loyalty.count} para ganhar {loyalty.percent}%.
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="space-y-1 sm:col-span-2">
                 <Label>Observações</Label>
                 <Textarea rows={1} value={header.notes} onChange={(e) => setHeader({ ...header, notes: e.target.value })} />
@@ -341,7 +419,8 @@ const SalesPage = () => {
               </div>
               {discount > 0 && (
                 <div className="flex justify-between text-sm text-slate-500">
-                  <span>Desconto</span><span className="font-mono">- {money(discount)}</span>
+                  <span>Desconto{coupon ? ` (cupom ${coupon.code})` : loyaltyOn ? ' (fidelidade)' : ''}</span>
+                  <span className="font-mono">- {money(discount)}</span>
                 </div>
               )}
               <div className="flex justify-between text-sm text-slate-500">
@@ -399,7 +478,10 @@ const SalesPage = () => {
                 </table>
               </div>
               <div className="text-sm text-slate-400 space-y-1">
-                {viewing.discount > 0 && <p>Desconto: {money(viewing.discount)}</p>}
+                {viewing.discount > 0 && (
+                  <p>Desconto: {money(viewing.discount)}
+                    {viewing.coupon_code ? ` (cupom ${viewing.coupon_code})` : viewing.loyalty_applied ? ' (fidelidade)' : ''}</p>
+                )}
                 <p>Comissão total: {money(viewing.commission || 0)}</p>
                 {isAdmin && <p>Lucro estimado (após comissão): {money(viewing.profit)}</p>}
                 {viewing.edited_at && <p>Editada em {formatDateTime(viewing.edited_at)} por {viewing.edited_by_name}</p>}
