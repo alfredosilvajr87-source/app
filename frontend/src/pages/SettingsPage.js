@@ -16,6 +16,7 @@ import { Building2, Save, Settings2, Upload, Image, Key, FileText, Settings } fr
 import PageHeader from '../components/layout/PageHeader';
 import { SELECT_CLASS } from '../components/store/ItemLines';
 import { apiError } from '../lib/store';
+import CouponsCard from '../components/store/CouponsCard';
 
 import { API_URL as API } from '../config';
 
@@ -27,7 +28,7 @@ const CURRENCIES = [
 
 const SettingsPage = () => {
   const { user, company, isAdmin, changePassword, updateCompany } = useAuth();
-  const { settings, setSettings } = useStore();
+  const { settings, setSettings, money } = useStore();
   const [storeForm, setStoreForm] = useState(settings);
   const [companyName, setCompanyName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -174,6 +175,8 @@ const SettingsPage = () => {
           </CardContent>
         </Card>
       )}
+
+      {isAdmin && <CouponsCard settings={settings} setSettings={setSettings} money={money} />}
 
       <Card>
         <CardHeader>

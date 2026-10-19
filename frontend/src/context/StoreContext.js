@@ -9,6 +9,7 @@ const StoreContext = createContext(null);
 
 const DEFAULT_SETTINGS = {
   currency: 'BRL', tax_id: '', address: '', phone: '', email: '', invoice_footer: '',
+  loyalty_every: 0, loyalty_percent: 30,
 };
 
 export const StoreProvider = ({ children }) => {
